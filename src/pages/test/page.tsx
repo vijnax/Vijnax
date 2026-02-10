@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from 'react';
 import { testAPI } from '../../services/api';
-import { testAPI } from '../../services/api';
 
 interface ApiOption {
   text: string;

@@ -17,6 +17,8 @@ const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URI_PROD;
  * Clean text by removing metadata patterns
  */
 function cleanText(text) {
+
+
   if (!text) return text;
   
   let cleaned = text;
