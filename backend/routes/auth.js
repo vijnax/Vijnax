@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import { generateToken } from '../middleware/auth.js';
 import { sendOTP, verifyOTP } from '../services/smsService.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
@@ -102,21 +103,34 @@ router.post('/verify-otp', [
       });
     }
 
-    // Get or create user
-    let user = users.get(mobile);
+    // Get or create user in MongoDB
+    let user = await User.findOne({ mobile });
+    
     if (!user) {
-      user = {
-        id: `user-${Date.now()}`,
+      // Create new user in database
+      user = await User.create({
         mobile,
         name: `User ${mobile.slice(-4)}`,
+        email: `${mobile}@temp.vijnax.com`, // Temporary email
+        password: `temp-${mobile}-${Date.now()}`, // Temporary password (will be hashed)
         role: 'user',
-        createdAt: new Date()
-      };
-      users.set(mobile, user);
+        isVerified: true // OTP verified
+      });
+      console.log(`✅ New user created: ${user.mobile}`);
+    } else {
+      // Update last login
+      user.lastLogin = new Date();
+      await user.save();
+      console.log(`✅ Existing user logged in: ${user.mobile}`);
     }
 
-    // Generate token
-    const token = generateToken(user);
+    // Generate token with real MongoDB _id
+    const token = generateToken({
+      id: user._id.toString(),
+      mobile: user.mobile,
+      email: user.email,
+      role: user.role
+    });
 
     res.json({
       success: true,
@@ -124,9 +138,10 @@ router.post('/verify-otp', [
       data: {
         token,
         user: {
-          id: user.id,
+          id: user._id.toString(),
           mobile: user.mobile,
           name: user.name,
+          email: user.email,
           role: user.role
         }
       }

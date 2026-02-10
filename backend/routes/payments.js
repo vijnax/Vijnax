@@ -98,7 +98,19 @@ router.post('/verify', verifyToken, async (req, res) => {
     const payment = await razorpay.payments.fetch(razorpay_payment_id);
 
     // Update user payment history
-    const user = await User.findById(req.user.id);
+    // Find user by mobile or email if ID is not a valid ObjectId
+    let user;
+    if (req.user.id && req.user.id.match(/^[0-9a-fA-F]{24}$/)) {
+      // Valid MongoDB ObjectId
+      user = await User.findById(req.user.id);
+    } else if (req.user.mobile) {
+      // Find by mobile number
+      user = await User.findOne({ mobile: req.user.mobile });
+    } else if (req.user.email) {
+      // Find by email
+      user = await User.findOne({ email: req.user.email });
+    }
+
     if (user) {
       user.paymentHistory.push({
         paymentId: razorpay_payment_id,
@@ -111,7 +123,9 @@ router.post('/verify', verifyToken, async (req, res) => {
         date: new Date()
       });
       await user.save();
-      console.log(`✅ Payment history updated for user: ${user.email}`);
+      console.log(`✅ Payment history updated for user: ${user.email || user.mobile}`);
+    } else {
+      console.warn(`⚠️  User not found for payment. User ID: ${req.user.id}, Mobile: ${req.user.mobile}`);
     }
 
     // If testId provided, update test metadata
