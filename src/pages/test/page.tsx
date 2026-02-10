@@ -1,18 +1,21 @@
 
 import { useState, useEffect } from 'react';
 import { testAPI } from '../../services/api';
+import { testAPI } from '../../services/api';
 
 interface ApiOption {
   text: string;
 }
 interface ApiQuestionGeneric {
-  questionId: string;
+  _id?: string;
+  questionId?: string;
   questionNumber?: number;
   text: string;
   options?: ApiOption[];
 }
 interface Question {
   id: number;
+  _id: string;  // MongoDB ID for backend
   text: string;
   options: string[];
   domain: string; // Section label
@@ -30,6 +33,7 @@ export default function Test() {
     const arr = list || [];
     return arr.map((q, i) => ({
       id: startIndex + i,
+      _id: q._id || q.questionId || '',  // Store MongoDB ID
       text: q.text,
       options: (q.options || []).map(o => o.text),
       domain: section
@@ -52,12 +56,17 @@ export default function Test() {
         
         // Map the questions from the new API format
         const apiQuestions = json.data?.questions || [];
-        const assembled: Question[] = apiQuestions.map((q: any) => ({
-          id: q.questionNumber,
+        console.log('📋 First question structure:', apiQuestions[0]);  // Debug log
+        
+        const assembled: Question[] = apiQuestions.map((q: any, index: number) => ({
+          id: q.questionNumber || (index + 1),
+          _id: q.questionId || q._id || '',  // MongoDB ID from backend (questionId field)
           text: q.text,
           options: (q.options || []).map((o: any) => o.text),
           domain: q.section || q.domain || 'General'
         }));
+        
+        console.log('✅ Mapped questions with IDs:', assembled.slice(0, 2));
 
         console.log(`📝 Loaded ${assembled.length} questions`);
         
@@ -128,9 +137,44 @@ export default function Test() {
     }
   };
 
-  const handleSubmitTest = () => {
-    const finalAnswers = selectedOption ? { ...answers, [currentQuestion]: selectedOption } : answers;
-    window.REACT_APP_NAVIGATE && window.REACT_APP_NAVIGATE('/payment');
+  const handleSubmitTest = async () => {
+    try {
+      console.log('📝 Submitting test...');
+      
+      // Collect final answers
+      const finalAnswers = selectedOption ? { ...answers, [currentQuestion]: selectedOption } : answers;
+      
+      console.log(`📊 Total answers: ${Object.keys(finalAnswers).length}/${totalQuestions}`);
+      
+      // Convert answers to API format
+      const answersArray = questions.map((q, index) => ({
+        questionId: q._id,
+        selectedOption: finalAnswers[index + 1] || null
+      }));
+      
+      // Submit test to backend
+      const response = await testAPI.submitTest({
+        testId: sessionStorage.getItem('currentTestId'),
+        answers: answersArray
+      });
+      
+      if (response.success) {
+        const testId = response.data.test._id || response.data.test.id;
+        console.log('✅ Test submitted successfully! Test ID:', testId);
+        
+        // Store test ID for payment page
+        sessionStorage.setItem('currentTestId', testId);
+        sessionStorage.setItem('testCompleted', 'true');
+        
+        // Navigate to payment
+        window.REACT_APP_NAVIGATE && window.REACT_APP_NAVIGATE('/payment');
+      } else {
+        alert('Failed to submit test. Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Submit test error:', error);
+      alert('Error submitting test. Please try again or contact support.');
+    }
   };
 
   const progress = (currentQuestion / (totalQuestions || 1)) * 100;

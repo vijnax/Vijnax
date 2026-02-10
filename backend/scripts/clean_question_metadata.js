@@ -30,8 +30,11 @@ function cleanText(text) {
   // Remove "-- X of Y --" patterns
   cleaned = cleaned.replace(/--\s*\d+\s*of\s*\d+\s*--/gi, '');
   
-  // Remove stream indicators like "(PCM – description)"
-  cleaned = cleaned.replace(/\((?:PCM|PCB|Commerce|Humanities)\s*[–-].*?\)/gi, '');
+  // Remove stream indicators like "(PCM – description)" or just "(PCM)"
+  cleaned = cleaned.replace(/\((?:PCM|PCB|Commerce|Humanities)(?:\s*[–-].*?)?\)/gi, '');
+  
+  // Also remove stream labels at start of text
+  cleaned = cleaned.replace(/^(?:PCM|PCB|Commerce|Humanities)\s*[–-]?\s*/gi, '');
   
   // Remove "Evaluates..." or "Assesses..." standalone phrases
   cleaned = cleaned.replace(/(?:Evaluates|Assesses|Measures)\s+[a-z\s,]+?(?=[A-Z]|$)/gi, '');

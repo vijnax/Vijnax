@@ -952,5 +952,109 @@ router.post('/generate/enhanced', verifyToken, async (req, res) => {
   }
 });
 
+// @route   POST /api/tests/submit
+// @desc    Submit entire test with all answers at once
+// @access  Private
+router.post('/submit', verifyToken, async (req, res) => {
+  try {
+    const { testId, answers } = req.body;
+
+    console.log(`📝 Submitting test for user: ${req.user.id}`);
+    console.log(`   Test ID: ${testId || 'NEW TEST'}`);
+    console.log(`   Total answers: ${answers?.length || 0}`);
+
+    // Find or create test
+    let test;
+    
+    if (testId) {
+      test = await Test.findById(testId);
+      if (!test) {
+        return res.status(404).json({
+          success: false,
+          message: 'Test not found'
+        });
+      }
+    } else {
+      // Create new test if no ID provided
+      test = new Test({
+        userId: req.user.id,
+        testType: 'comprehensive',
+        status: 'in_progress',
+        startedAt: new Date()
+      });
+    }
+
+    // Update test with answers
+    test.questions = answers.map((answer, index) => ({
+      questionId: answer.questionId,
+      answer: answer.selectedOption,
+      answeredAt: new Date(),
+      order: index
+    }));
+
+    // Calculate results
+    const results = calculateTestResults(test.questions);
+    test.results = results;
+    
+    // Mark as completed
+    test.status = 'completed';
+    test.completedAt = new Date();
+    test.duration = Math.round((test.completedAt - test.startedAt) / 1000); // seconds
+
+    await test.save();
+
+    console.log(`✅ Test submitted successfully: ${test._id}`);
+
+    res.json({
+      success: true,
+      message: 'Test submitted successfully',
+      data: {
+        test: {
+          _id: test._id,
+          id: test._id,
+          status: test.status,
+          results: test.results,
+          completedAt: test.completedAt
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Submit test error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error submitting test',
+      error: error.message
+    });
+  }
+});
+
+// Helper function to calculate test results
+function calculateTestResults(questions) {
+  // Initialize scores
+  const scores = {
+    aptitude: 0,
+    values: 0,
+    personality: 0,
+    skills: 0
+  };
+
+  // Calculate section scores (simplified for now)
+  const totalQuestions = questions.length;
+  
+  // For now, give a base score of 60-90 range
+  scores.aptitude = Math.round(60 + Math.random() * 30);
+  scores.values = Math.round(60 + Math.random() * 30);
+  scores.personality = Math.round(60 + Math.random() * 30);
+  scores.skills = Math.round(60 + Math.random() * 30);
+
+  return {
+    scores,
+    totalQuestions,
+    answeredQuestions: questions.filter(q => q.answer).length,
+    completionPercentage: 100
+  };
+}
+
 export default router;
 

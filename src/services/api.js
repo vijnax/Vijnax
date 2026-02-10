@@ -141,6 +141,9 @@ export const testAPI = {
 
   // Complete test
   completeTest: (testId) => api.post(`/tests/${testId}/complete`),
+  
+  // Submit entire test with all answers
+  submitTest: (data) => api.post('/tests/submit', data),
 
   // Get test history
   getTestHistory: (page = 1, limit = 10) => 
