@@ -55,11 +55,11 @@ export async function generateCareerReport(testData, userData) {
         doc.moveDown(0.3);
       };
 
-      const addHeading = (text, emoji = '', size = 18) => {
+      const addHeading = (text, size = 18) => {
         doc.fontSize(size)
            .font('Helvetica-Bold')
            .fillColor(colors.dark)
-           .text(`${emoji} ${text}`);
+           .text(text);
         doc.moveDown(0.4);
       };
 
@@ -174,23 +174,23 @@ export async function generateCareerReport(testData, userData) {
       
       doc.y = infoBoxY + 15;
       doc.fontSize(13).font('Helvetica-Bold').fillColor(colors.dark);
-      doc.text(`👤 Student: ${userData.name || 'N/A'}`, 80, doc.y);
+      doc.text(`Student: ${userData.name || 'N/A'}`, 80, doc.y);
       doc.moveDown(0.6);
       
       doc.fontSize(11).font('Helvetica').fillColor(colors.text);
-      doc.text(`📚 Class: ${userData.profile?.grade || 'N/A'}`, 80);
+      doc.text(`Class: ${userData.profile?.grade || 'N/A'}`, 80);
       doc.moveDown(0.5);
-      doc.text(`🏫 School: ${userData.profile?.school || 'N/A'}`, 80);
+      doc.text(`School: ${userData.profile?.school || 'N/A'}`, 80);
       doc.moveDown(0.5);
-      doc.text(`📅 Date: ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`, 80);
+      doc.text(`Date: ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`, 80);
       doc.moveDown(0.5);
-      doc.text(`🔖 Assessment ID: ${testData._id.toString().substring(0, 12).toUpperCase()}`, 80);
+      doc.text(`Assessment ID: ${testData._id.toString().substring(0, 12).toUpperCase()}`, 80);
       
       doc.y = infoBoxY + 125;
       doc.moveDown();
 
       // ============= EXECUTIVE SUMMARY WITH HIGHLIGHT BOX =============
-      addHeading('Executive Summary', '📊', 20);
+      addHeading('Executive Summary', 20);
       
       const streamScores = testData.results.streamAnalysis || calculateStreamScores(testData.results);
       const primaryStream = Object.entries(streamScores).sort((a, b) => b[1] - a[1])[0];
@@ -210,7 +210,7 @@ export async function generateCareerReport(testData, userData) {
       
       doc.y = summaryY + 15;
       doc.fontSize(14).font('Helvetica-Bold').fillColor(colors.dark);
-      doc.text('🎯 Recommended Stream', 80);
+      doc.text('RECOMMENDED STREAM', 80);
       doc.moveDown(0.5);
       
       doc.fontSize(20).font('Helvetica-Bold').fillColor(colors.success);
@@ -218,7 +218,7 @@ export async function generateCareerReport(testData, userData) {
       doc.moveDown(0.4);
       
       doc.fontSize(11).font('Helvetica').fillColor(colors.text);
-      const confidenceLevel = primaryStream[1] > 75 ? 'HIGH ✨' : primaryStream[1] > 60 ? 'MEDIUM 👍' : 'MODERATE 📈';
+      const confidenceLevel = primaryStream[1] > 75 ? 'HIGH' : primaryStream[1] > 60 ? 'MEDIUM' : 'MODERATE';
       doc.text(`Confidence Level: ${confidenceLevel} | Secondary Option: ${secondaryStream[0]}`, 80);
       
       doc.y = summaryY + 100;
@@ -244,7 +244,7 @@ export async function generateCareerReport(testData, userData) {
       doc.fillOpacity(1);
       
       doc.y = 75;
-      addHeading('Stream Fit Analysis', '📈', 22);
+      addHeading('Stream Fit Analysis', 22);
       doc.moveDown(0.5);
       
       // Map short to long names for lookup
@@ -255,13 +255,6 @@ export async function generateCareerReport(testData, userData) {
         'Humanities': 'Humanities'
       };
       
-      const streamEmojis = {
-        'PCM': '🔬',
-        'PCB': '🧬',
-        'Commerce': '💼',
-        'Humanities': '📚'
-      };
-      
       // Visual progress bars for each stream
       const streams = ['PCM', 'PCB', 'Commerce', 'Humanities'];
       
@@ -270,8 +263,7 @@ export async function generateCareerReport(testData, userData) {
         const score = streamScores[longName] || streamScores[stream] || 0;
         const barColor = score > 70 ? colors.success : score > 55 ? colors.warning : colors.textLight;
         
-        const fullName = `${streamEmojis[stream]} ${stream}`;
-        addProgressBar(fullName, score, barColor);
+        addProgressBar(stream, score, barColor);
       });
       
       doc.moveDown();
@@ -282,9 +274,9 @@ export async function generateCareerReport(testData, userData) {
       doc.moveDown(0.3);
       
       const interpretations = [
-        { range: '70%+', level: 'Strong Fit', color: colors.success, emoji: '✅', text: 'Highly Recommended - Strong alignment with aptitude & interests' },
-        { range: '55-69%', level: 'Moderate Fit', color: colors.warning, emoji: '⚡', text: 'Worth Considering - Good potential with focused effort' },
-        { range: '<55%', level: 'Weak Fit', color: colors.textLight, emoji: '⚠️', text: 'Not Recommended - Consider alternatives better suited to your profile' }
+        { range: '70%+', level: 'Strong Fit', color: colors.success, text: 'Highly Recommended - Strong alignment with aptitude & interests' },
+        { range: '55-69%', level: 'Moderate Fit', color: colors.warning, text: 'Worth Considering - Good potential with focused effort' },
+        { range: '<55%', level: 'Weak Fit', color: colors.textLight, text: 'Not Recommended - Consider alternatives better suited to your profile' }
       ];
       
       interpretations.forEach(interp => {
@@ -296,7 +288,7 @@ export async function generateCareerReport(testData, userData) {
         
         doc.y = boxY + 8;
         doc.fontSize(11).font('Helvetica-Bold').fillColor(interp.color);
-        doc.text(`${interp.emoji} ${interp.range} - ${interp.level}`, 75, doc.y);
+        doc.text(`${interp.range} - ${interp.level}`, 75, doc.y);
         doc.moveDown(0.4);
         doc.fontSize(9).font('Helvetica').fillColor(colors.text);
         doc.text(interp.text, 75);
@@ -317,7 +309,7 @@ export async function generateCareerReport(testData, userData) {
       doc.fillOpacity(1);
       
       doc.y = aptBoxY + 12;
-      addHeading('Aptitude Analysis', '🧠', 16);
+      addHeading('Aptitude Analysis', 16);
       const aptitudeScores = testData.results.scores.aptitude || {};
       const aptScore = testData.results.scores?.aptitude || 65;
       addText(
@@ -335,7 +327,7 @@ export async function generateCareerReport(testData, userData) {
       doc.fillOpacity(1);
       
       doc.y = riasecBoxY + 12;
-      addHeading('Career Interests (RIASEC)', '🎯', 16);
+      addHeading('Career Interests (RIASEC)', 16);
       const riasecScores = testData.results.riasecProfile || {};
       const topInterests = getTopRIASECTypes(riasecScores);
       addText(
@@ -353,7 +345,7 @@ export async function generateCareerReport(testData, userData) {
       doc.fillOpacity(1);
       
       doc.y = persBoxY + 12;
-      addHeading('Personality Profile (Big Five)', '🌟', 16);
+      addHeading('Personality Profile (Big Five)', 16);
       const personalityScores = testData.results.personalityProfile || {};
       const personalityTraits = getPersonalityDescription(personalityScores);
       const persScore = testData.results.scores?.personality || 65;
@@ -362,7 +354,7 @@ export async function generateCareerReport(testData, userData) {
 
       // Decision-Making with mini bar
       doc.moveDown();
-      addSubHeading('🎲 Decision-Making & Judgment', 14);
+      addSubHeading('Decision-Making & Judgment', 14);
       const decisionScore = testData.results.scores.values || 0;
       addProgressBar('Decision Quality', decisionScore, decisionScore > 70 ? colors.success : colors.warning);
       addText(
@@ -373,7 +365,7 @@ export async function generateCareerReport(testData, userData) {
       );
 
       // ESI with mini bar
-      addSubHeading('💝 Emotional & Social Intelligence', 14);
+      addSubHeading('Emotional & Social Intelligence', 14);
       const esiScore = testData.results.esiScore || testData.results.scores.values || 0;
       addProgressBar('ESI Score', esiScore, esiScore > 70 ? colors.success : colors.warning);
       addText(
@@ -384,7 +376,7 @@ export async function generateCareerReport(testData, userData) {
       );
 
       // Learning with mini bar
-      addSubHeading('📖 Learning Orientation', 14);
+      addSubHeading('Learning Orientation', 14);
       const learningScore = testData.results.scores.skills || 0;
       addProgressBar('Learning Style', learningScore, learningScore > 70 ? colors.success : colors.warning);
       addText(
@@ -395,7 +387,7 @@ export async function generateCareerReport(testData, userData) {
       );
 
       // Work Values
-      addSubHeading('⚖️ Work Values & Lifestyle', 14);
+      addSubHeading('Work Values & Lifestyle', 14);
       const workValues = testData.results.workValues || {};
       addText(getWorkValuesDescription(workValues), { size: 11 });
 
@@ -412,7 +404,7 @@ export async function generateCareerReport(testData, userData) {
       doc.fillOpacity(1);
       
       doc.y = 75;
-      addHeading('Integrated Career Guidance', '🎓', 22);
+      addHeading('Integrated Career Guidance', 22);
       doc.moveDown();
       
       // Highlight recommendation box
@@ -429,7 +421,7 @@ export async function generateCareerReport(testData, userData) {
       
       doc.y = guidanceY + 12;
       doc.fontSize(16).font('Helvetica-Bold').fillColor(colors.success);
-      doc.text(`✅ Primary Recommendation: ${primaryStream[0]}`, 80);
+      doc.text(`PRIMARY RECOMMENDATION: ${primaryStream[0]}`, 80);
       doc.moveDown(0.8);
       
       doc.fontSize(11).font('Helvetica').fillColor(colors.text);
@@ -443,7 +435,7 @@ export async function generateCareerReport(testData, userData) {
       doc.y = guidanceY + 110;
       doc.moveDown(1.5);
 
-      // ============= PARENTAL NOTE WITH ICON =============
+      // ============= PARENTAL NOTE =============
       const parentY = doc.y;
       doc.roundedRect(60, parentY, 475, 120, 8)
          .fillOpacity(0.05)
@@ -456,7 +448,7 @@ export async function generateCareerReport(testData, userData) {
          .stroke();
       
       doc.y = parentY + 12;
-      addHeading('For Parents', '👨‍👩‍👧', 16);
+      addHeading('For Parents', 16);
       doc.fontSize(11).font('Helvetica').fillColor(colors.text);
       doc.text(
         `Parents are advised to support ${userData.name || 'the student'} in exploring ` +
@@ -481,7 +473,7 @@ export async function generateCareerReport(testData, userData) {
       doc.fillOpacity(1);
       
       doc.y = disclaimerY + 12;
-      addHeading('Important Disclaimer', '⚠️', 15);
+      addHeading('Important Disclaimer', 15);
       
       doc.fontSize(10).font('Helvetica').fillColor(colors.text);
       addText(
@@ -492,11 +484,11 @@ export async function generateCareerReport(testData, userData) {
       );
       
       const disclaimerPoints = [
-        '📌 Results should be used as guidance, not a final verdict',
-        '📌 Student motivation, effort, and learning can significantly influence outcomes',
-        '📌 Recommended stream may change as student develops new skills and interests',
-        '📌 Assessment does not measure board exam performance or guarantee admissions',
-        '📌 Consider insights alongside academic records and personal aspirations'
+        '* Results should be used as guidance, not a final verdict',
+        '* Student motivation, effort, and learning can significantly influence outcomes',
+        '* Recommended stream may change as student develops new skills and interests',
+        '* Assessment does not measure board exam performance or guarantee admissions',
+        '* Consider insights alongside academic records and personal aspirations'
       ];
       
       disclaimerPoints.forEach(point => {
@@ -518,7 +510,7 @@ export async function generateCareerReport(testData, userData) {
       doc.fontSize(12).font('Helvetica-Bold').fillColor('#FFFFFF')
          .text('Career Compass', 0, footerY, { align: 'center', width: 595 });
       doc.fontSize(9).font('Helvetica').fillColor('#E0E7FF')
-         .text('Powered by Vijnax © 2026 | Empowering Students, Guiding Futures', 
+         .text('Powered by Vijnax (C) 2026 | Empowering Students, Guiding Futures', 
                0, footerY + 18, { align: 'center', width: 595 });
 
       // Finalize PDF
