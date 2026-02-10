@@ -12,20 +12,30 @@ export default function PaymentSuccess() {
     const storedPaymentInfo = sessionStorage.getItem('paymentInfo');
     const storedTestId = sessionStorage.getItem('currentTestId');
     
+    console.log('🔍 Checking stored data:');
+    console.log('   Payment Info:', storedPaymentInfo ? 'Found' : 'NOT FOUND');
+    console.log('   Test ID:', storedTestId || 'NOT FOUND');
+    
     if (storedPaymentInfo) {
       setPaymentInfo(JSON.parse(storedPaymentInfo));
     }
     
     if (storedTestId) {
       setTestId(storedTestId);
+      console.log('✅ Test ID loaded:', storedTestId);
+    } else {
+      console.warn('⚠️  No test ID found! User cannot download report.');
     }
   }, []);
 
   const handleDownloadReport = async () => {
     if (!testId) {
-      alert('Test ID not found. Please contact support.');
+      console.error('❌ Cannot download: No test ID');
+      alert('Test ID not found. Please complete a test first or contact support.');
       return;
     }
+    
+    console.log('📥 Starting PDF download for test:', testId);
 
     try {
       setDownloading(true);
