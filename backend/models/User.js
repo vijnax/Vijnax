@@ -87,14 +87,31 @@ const userSchema = new mongoose.Schema({
   }],
   paymentHistory: [{
     paymentId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Payment'
+      type: String, // Razorpay payment ID
+      required: true
     },
-    amount: Number,
+    orderId: {
+      type: String // Razorpay order ID
+    },
+    amount: {
+      type: Number,
+      required: true
+    },
+    currency: {
+      type: String,
+      default: 'INR'
+    },
     status: {
       type: String,
       enum: ['pending', 'completed', 'failed', 'refunded'],
-      default: 'pending'
+      default: 'completed'
+    },
+    method: {
+      type: String // Payment method (card, upi, netbanking, etc.)
+    },
+    testId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Test'
     },
     date: {
       type: Date,

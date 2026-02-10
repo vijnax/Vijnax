@@ -162,8 +162,21 @@ export const userAPI = {
 
 // Payment API methods
 export const paymentAPI = {
-  // Create payment
-  createPayment: (paymentData) => api.post('/payments/create', paymentData),
+  // Create Razorpay order
+  createOrder: (amount = 9900, testId = null) => 
+    api.post('/payments/create-order', { amount, testId }),
+  
+  // Verify payment
+  verifyPayment: (paymentData) => 
+    api.post('/payments/verify', paymentData),
+  
+  // Get payment status
+  getPaymentStatus: (paymentId) => 
+    api.get(`/payments/status/${paymentId}`),
+  
+  // Get payment history
+  getPaymentHistory: () => 
+    api.get('/payments/history'),
 };
 
 // Admin API methods

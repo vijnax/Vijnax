@@ -19,15 +19,15 @@ export default function OtpLogin() {
     setError('');
     
     try {
-      const response = await authAPI.sendOTP(mobileNumber);
-      
-      if (response.success) {
-        setStep('otp');
-      } else {
-        setError(response.message || 'Failed to send OTP');
+        const response = await authAPI.sendOTP(mobileNumber);
+        
+        if (response.success) {
+          setStep('otp');
+        } else {
+          setError(response.message || 'Failed to send OTP');
       }
     } catch (error) {
-      setError(error.message || 'Failed to send OTP. Please try again.');
+        setError(error.message || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -43,20 +43,20 @@ export default function OtpLogin() {
     setError('');
     
     try {
-      const response = await authAPI.verifyOTP(mobileNumber, otp);
-      
-      if (response.success) {
-        // Store token
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+        const response = await authAPI.verifyOTP(mobileNumber, otp);
         
-        // Navigate to test instructions
-        window.REACT_APP_NAVIGATE('/test-instructions');
-      } else {
-        setError(response.message || 'Invalid OTP. Please try again.');
+        if (response.success) {
+          // Store token
+          localStorage.setItem('token', response.data.token);
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+          
+          // Navigate to test instructions
+          window.REACT_APP_NAVIGATE('/test-instructions');
+        } else {
+          setError(response.message || 'Invalid OTP. Please try again.');
       }
     } catch (error) {
-      setError(error.message || 'Invalid OTP. Please try again.');
+        setError(error.message || 'Invalid OTP. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -1,20 +1,121 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { paymentAPI } from '../../services/api';
+
+// Extend Window interface for Razorpay
+declare global {
+  interface Window {
+    Razorpay: any;
+    REACT_APP_NAVIGATE: any;
+  }
+}
 
 export default function Payment() {
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'qr' | 'mobile'>('upi');
-  const [upiId, setUpiId] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
   const [loading, setLoading] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  const handlePayment = () => {
+  // Load Razorpay script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => {
+      console.log('✅ Razorpay script loaded');
+      setRazorpayLoaded(true);
+    };
+    script.onerror = () => {
+      console.error('❌ Failed to load Razorpay script');
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const handlePayment = async () => {
+    if (!razorpayLoaded) {
+      alert('Payment gateway is loading. Please try again in a moment.');
+      return;
+    }
+
     setLoading(true);
     
-    // Simulate payment process
-    setTimeout(() => {
+    try {
+      console.log('💳 Creating Razorpay order...');
+      
+      // Step 1: Create order on backend
+      const orderResponse = await paymentAPI.createOrder(9900); // ₹99 = 9900 paise
+      
+      if (!orderResponse.success) {
+        throw new Error(orderResponse.message || 'Failed to create order');
+      }
+
+      const { orderId, amount, currency, key } = orderResponse.data;
+      console.log('✅ Order created:', orderId);
+
+      // Step 2: Get user details from localStorage
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+
+      // Step 3: Open Razorpay checkout
+      const options = {
+        key: key, // Razorpay key from backend
+        amount: amount, // Amount in paise
+        currency: currency,
+        name: 'Career Compass',
+        description: 'Psychometric Assessment Report',
+        image: '/logo.png', // Your logo URL
+        order_id: orderId,
+        prefill: {
+          name: userData.name || '',
+          email: userData.email || '',
+          contact: userData.mobile || ''
+        },
+        theme: {
+          color: '#2563eb' // Blue color matching your theme
+        },
+        handler: async function (response: any) {
+          console.log('✅ Payment successful:', response);
+          
+          // Step 4: Verify payment on backend
+          try {
+            const verifyResponse = await paymentAPI.verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              testId: sessionStorage.getItem('currentTestId')
+            });
+
+            if (verifyResponse.success) {
+              console.log('✅ Payment verified');
+              // Navigate to success page
+              window.REACT_APP_NAVIGATE('/payment-success');
+            } else {
+              alert('Payment verification failed. Please contact support.');
+            }
+          } catch (error) {
+            console.error('❌ Payment verification error:', error);
+            alert('Payment verification failed. Please contact support.');
+          }
+          
+          setLoading(false);
+        },
+        modal: {
+          ondismiss: function() {
+            console.log('⚠️  Payment cancelled by user');
+            setLoading(false);
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+      
+    } catch (error: any) {
+      console.error('❌ Payment error:', error);
+      alert(error.message || 'Failed to process payment. Please try again.');
       setLoading(false);
-      window.REACT_APP_NAVIGATE('/payment-success');
-    }, 3000);
+    }
   };
 
   return (
@@ -37,10 +138,10 @@ export default function Payment() {
           {/* Price Section */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-white text-center">
             <div className="mb-4">
-              <span className="text-4xl font-bold">₹199</span>
+              <span className="text-4xl font-bold">₹99</span>
               <span className="text-blue-200 line-through ml-2">₹499</span>
             </div>
-            <p className="text-blue-100 mb-4">Limited Time Offer - 60% Off!</p>
+            <p className="text-blue-100 mb-4">Limited Time Offer - 80% Off!</p>
             <div className="bg-white/20 rounded-lg p-4">
               <h3 className="font-semibold mb-2">What you'll get:</h3>
               <ul className="text-sm space-y-1">
@@ -55,127 +156,56 @@ export default function Payment() {
 
           {/* Payment Methods */}
           <div className="p-8">
-            <h3 className="text-xl font-semibold text-gray-900 mb-6">Choose Payment Method</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-6">Secure Payment</h3>
             
-            {/* Payment Method Tabs */}
-            <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
-              <button
-                onClick={() => setPaymentMethod('upi')}
-                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all whitespace-nowrap cursor-pointer ${
-                  paymentMethod === 'upi' 
-                    ? 'bg-white text-blue-600 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                UPI ID
-              </button>
-              <button
-                onClick={() => setPaymentMethod('qr')}
-                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all whitespace-nowrap cursor-pointer ${
-                  paymentMethod === 'qr' 
-                    ? 'bg-white text-blue-600 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                QR Code
-              </button>
-              <button
-                onClick={() => setPaymentMethod('mobile')}
-                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all whitespace-nowrap cursor-pointer ${
-                  paymentMethod === 'mobile' 
-                    ? 'bg-white text-blue-600 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                Mobile
-              </button>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+              <p className="text-blue-800 text-sm">
+                <i className="ri-information-line mr-2"></i>
+                Click the button below to proceed with secure payment. You can pay using UPI, Cards, Net Banking, or Wallets.
+              </p>
             </div>
 
-            {/* Payment Forms */}
-            {paymentMethod === 'upi' && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Enter UPI ID
-                </label>
-                <input
-                  type="text"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="example@paytm"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-lg"
-                />
+            {/* Payment Features */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="flex items-center space-x-2 text-gray-700">
+                <i className="ri-bank-card-line text-blue-600 text-xl"></i>
+                <span className="text-sm">Credit/Debit Cards</span>
               </div>
-            )}
-
-            {paymentMethod === 'qr' && (
-              <div className="text-center">
-                <div className="bg-gray-100 p-8 rounded-2xl inline-block">
-                  <img 
-                    src="https://readdy.ai/api/search-image?query=QR%20code%20payment%20interface%20for%20UPI%20transaction%2C%20clean%20white%20background%20with%20blue%20accent%20colors%2C%20modern%20payment%20gateway%20design%2C%20Indian%20payment%20system%20QR%20code%20scanner&width=200&height=200&seq=qr-code-1&orientation=squarish"
-                    alt="QR Code"
-                    className="w-48 h-48 object-contain mx-auto"
-                  />
-                </div>
-                <p className="text-gray-600 mt-4">
-                  Scan this QR code with any UPI app to pay ₹199
-                </p>
-                <div className="flex justify-center space-x-4 mt-4">
-                  <img 
-                    src="https://readdy.ai/api/search-image?query=Google%20Pay%20logo%20icon%2C%20clean%20vector%20style%20payment%20app%20logo&width=40&height=40&seq=gpay-logo-1&orientation=squarish"
-                    alt="Google Pay" 
-                    className="w-10 h-10 object-contain"
-                  />
-                  <img 
-                    src="https://readdy.ai/api/search-image?query=PhonePe%20logo%20icon%2C%20clean%20vector%20style%20payment%20app%20logo&width=40&height=40&seq=phonepe-logo-1&orientation=squarish"
-                    alt="PhonePe" 
-                    className="w-10 h-10 object-contain"
-                  />
-                  <img 
-                    src="https://readdy.ai/api/search-image?query=Paytm%20logo%20icon%2C%20clean%20vector%20style%20payment%20app%20logo&width=40&height=40&seq=paytm-logo-1&orientation=squarish"
-                    alt="Paytm" 
-                    className="w-10 h-10 object-contain"
-                  />
-                </div>
+              <div className="flex items-center space-x-2 text-gray-700">
+                <i className="ri-smartphone-line text-blue-600 text-xl"></i>
+                <span className="text-sm">UPI Payment</span>
               </div>
-            )}
-
-            {paymentMethod === 'mobile' && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Mobile Number
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500">+91</span>
-                  </div>
-                  <input
-                    type="tel"
-                    value={mobileNumber}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setMobileNumber(value);
-                    }}
-                    placeholder="98765 43210"
-                    className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-lg"
-                    maxLength={10}
-                  />
-                </div>
+              <div className="flex items-center space-x-2 text-gray-700">
+                <i className="ri-wallet-line text-blue-600 text-xl"></i>
+                <span className="text-sm">Wallets</span>
               </div>
-            )}
+              <div className="flex items-center space-x-2 text-gray-700">
+                <i className="ri-bank-line text-blue-600 text-xl"></i>
+                <span className="text-sm">Net Banking</span>
+              </div>
+            </div>
 
             {/* Payment Button */}
             <button
               onClick={handlePayment}
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 mt-8 disabled:transform-none whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
+              disabled={loading || !razorpayLoaded}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 disabled:transform-none whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {!razorpayLoaded ? (
                 <div className="flex items-center justify-center">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
-                  Processing Payment...
+                  Loading Payment Gateway...
+                </div>
+              ) : loading ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                  Processing...
                 </div>
               ) : (
-                'Pay ₹199 and Download Report'
+                <>
+                  <i className="ri-lock-line mr-2"></i>
+                  Pay ₹99 Securely
+                </>
               )}
             </button>
 
@@ -193,10 +223,10 @@ export default function Payment() {
             {/* Powered by */}
             <div className="mt-6 text-center">
               <p className="text-gray-500 text-sm mb-2">Powered by</p>
-              <div className="flex justify-center items-center space-x-6">
-                <span className="text-blue-600 font-bold">Razorpay</span>
-                <span className="text-gray-400">•</span>
-                <span className="text-purple-600 font-bold">PayU</span>
+              <div className="flex justify-center items-center">
+                <svg className="w-24 h-8" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+                  <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill="#2563eb" fontSize="28" fontWeight="bold">Razorpay</text>
+                </svg>
               </div>
             </div>
           </div>
