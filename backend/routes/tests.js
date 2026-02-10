@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { body, validationResult } from 'express-validator';
 import Test from '../models/Test.js';
+import User from '../models/User.js';
 import Question from '../models/Question.js';
 import RIASECQuestion from '../models/RIASECQuestion.js';
 import { verifyToken } from '../middleware/auth.js';
@@ -976,11 +977,27 @@ router.post('/submit', verifyToken, async (req, res) => {
       }
     } else {
       // Create new test if no ID provided
+      const totalQs = answers.length || 60;
+      
       test = new Test({
         userId: req.user.id,
         testType: 'comprehensive',
         status: 'in_progress',
-        startedAt: new Date()
+        startedAt: new Date(),
+        progress: {
+          totalQuestions: totalQs,
+          answeredCount: answers.filter(a => a.selectedOption).length,
+          currentQuestion: totalQs,
+          timeSpent: 0,
+          timeRemaining: 0
+        },
+        settings: {
+          timeLimit: 60,
+          allowBackNavigation: true,
+          showProgress: true,
+          randomizeQuestions: true,
+          showTimer: true
+        }
       });
     }
 
@@ -989,11 +1006,15 @@ router.post('/submit', verifyToken, async (req, res) => {
       questionId: answer.questionId,
       answer: answer.selectedOption,
       answeredAt: new Date(),
-      order: index
+      order: index + 1
     }));
 
-    // Calculate results
-    const results = calculateTestResults(test.questions);
+    // Update progress
+    test.progress.answeredCount = answers.filter(a => a.selectedOption).length;
+    test.progress.currentQuestion = test.questions.length;
+
+    // Calculate results (async now)
+    const results = await calculateTestResults(test.questions);
     test.results = results;
     
     // Mark as completed
@@ -1002,6 +1023,32 @@ router.post('/submit', verifyToken, async (req, res) => {
     test.duration = Math.round((test.completedAt - test.startedAt) / 1000); // seconds
 
     await test.save();
+
+    // Update user's test history
+    const user = await User.findById(req.user.id);
+    if (user) {
+      const existingTestIndex = user.testHistory.findIndex(
+        t => t.testId && t.testId.toString() === test._id.toString()
+      );
+      
+      if (existingTestIndex >= 0) {
+        // Update existing test entry
+        user.testHistory[existingTestIndex].completedAt = test.completedAt;
+        user.testHistory[existingTestIndex].status = 'completed';
+        user.testHistory[existingTestIndex].score = test.results.overallScore;
+      } else {
+        // Add new test entry
+        user.testHistory.push({
+          testId: test._id,
+          startedAt: test.startedAt,
+          completedAt: test.completedAt,
+          status: 'completed',
+          score: test.results.overallScore
+        });
+      }
+      await user.save();
+      console.log(`✅ User test history updated for: ${user.mobile || user.email}`);
+    }
 
     console.log(`✅ Test submitted successfully: ${test._id}`);
 
@@ -1030,7 +1077,7 @@ router.post('/submit', verifyToken, async (req, res) => {
 });
 
 // Helper function to calculate test results
-function calculateTestResults(questions) {
+async function calculateTestResults(testQuestions) {
   // Initialize scores
   const scores = {
     aptitude: 0,
@@ -1039,20 +1086,71 @@ function calculateTestResults(questions) {
     skills: 0
   };
 
-  // Calculate section scores (simplified for now)
-  const totalQuestions = questions.length;
+  const riasecProfile = { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 };
+  const personalityProfile = { O: 0, C: 0, E: 0, A: 0, S: 0 };
   
-  // For now, give a base score of 60-90 range
-  scores.aptitude = Math.round(60 + Math.random() * 30);
-  scores.values = Math.round(60 + Math.random() * 30);
-  scores.personality = Math.round(60 + Math.random() * 30);
-  scores.skills = Math.round(60 + Math.random() * 30);
+  // Fetch all questions with their scoring data
+  const questionIds = testQuestions.map(tq => tq.questionId);
+  const questions = await Question.find({ _id: { $in: questionIds } });
+  const riasecQuestions = await RIASECQuestion.find({ _id: { $in: questionIds } });
+  
+  // Create lookup maps
+  const questionMap = {};
+  questions.forEach(q => {
+    questionMap[q._id.toString()] = q;
+  });
+  riasecQuestions.forEach(q => {
+    questionMap[q._id.toString()] = q;
+  });
+  
+  // Calculate scores based on actual answers
+  let totalScore = 0;
+  let maxScore = 0;
+  
+  testQuestions.forEach(tq => {
+    const question = questionMap[tq.questionId.toString()];
+    if (!question || !tq.answer) return;
+    
+    const selectedOption = question.options.find(opt => opt.text === tq.answer);
+    if (!selectedOption) return;
+    
+    // Add to domain scores
+    const domain = question.domain;
+    if (domain === 'aptitude') scores.aptitude += selectedOption.score || 5;
+    else if (domain === 'values') scores.values += selectedOption.score || 5;
+    else if (domain === 'personality') scores.personality += selectedOption.score || 5;
+    else if (domain === 'skills') scores.skills += selectedOption.score || 5;
+    
+    // RIASEC scoring
+    if (selectedOption.riasecType) {
+      riasecProfile[selectedOption.riasecType] = (riasecProfile[selectedOption.riasecType] || 0) + 1;
+    }
+    
+    // Personality trait scoring
+    if (selectedOption.mappedTrait) {
+      personalityProfile[selectedOption.mappedTrait] = (personalityProfile[selectedOption.mappedTrait] || 0) + (selectedOption.score || 5);
+    }
+    
+    totalScore += selectedOption.score || 5;
+    maxScore += 10;
+  });
+
+  // Normalize scores to 0-100 scale
+  const normalize = (score, max) => Math.round((score / max) * 100) || 60;
+  
+  scores.aptitude = normalize(scores.aptitude, maxScore / 4);
+  scores.values = normalize(scores.values, maxScore / 4);
+  scores.personality = normalize(scores.personality, maxScore / 4);
+  scores.skills = normalize(scores.skills, maxScore / 4);
 
   return {
     scores,
-    totalQuestions,
-    answeredQuestions: questions.filter(q => q.answer).length,
-    completionPercentage: 100
+    riasecProfile,
+    personalityProfile,
+    totalQuestions: testQuestions.length,
+    answeredQuestions: testQuestions.filter(q => q.answer).length,
+    completionPercentage: 100,
+    overallScore: normalize(totalScore, maxScore)
   };
 }
 
