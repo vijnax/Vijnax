@@ -189,6 +189,23 @@ export const adminAPI = {
 export const reportAPI = {
   // Get test report
   getReport: (testId) => api.get(`/reports/${testId}`),
+  
+  // Download PDF report
+  downloadPDF: async (testId) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE_URL}/reports/${testId}/pdf`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to download report');
+    }
+    
+    return response.blob();
+  },
 };
 
 // Health check

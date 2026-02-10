@@ -26,7 +26,10 @@ router.get('/:testId', verifyToken, async (req, res) => {
     }
 
     // Check if user owns this test (or is admin)
-    if (test.userId._id.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    const userId = test.userId._id ? test.userId._id.toString() : test.userId.toString();
+    const requestUserId = req.user.id || req.user._id;
+    
+    if (userId !== requestUserId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Access denied'
@@ -87,7 +90,10 @@ router.get('/:testId/pdf', verifyToken, async (req, res) => {
     }
 
     // Check if user owns this test (or is admin)
-    if (test.userId._id.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    const pdfUserId = test.userId._id ? test.userId._id.toString() : test.userId.toString();
+    const pdfRequestUserId = req.user.id || req.user._id;
+    
+    if (pdfUserId !== pdfRequestUserId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Access denied'
@@ -151,7 +157,10 @@ router.post('/:testId/email', verifyToken, async (req, res) => {
     }
 
     // Check access
-    if (test.userId._id.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    const emailUserId = test.userId._id ? test.userId._id.toString() : test.userId.toString();
+    const emailRequestUserId = req.user.id || req.user._id;
+    
+    if (emailUserId !== emailRequestUserId.toString() && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Access denied'

@@ -88,6 +88,16 @@ export default function Payment() {
 
             if (verifyResponse.success) {
               console.log('✅ Payment verified');
+              
+              // Store payment info in sessionStorage for success page
+              sessionStorage.setItem('paymentInfo', JSON.stringify({
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id,
+                method: 'razorpay', // Will be updated from backend if available
+                amount: 99,
+                timestamp: new Date().toISOString()
+              }));
+              
               // Navigate to success page
               window.REACT_APP_NAVIGATE('/payment-success');
             } else {

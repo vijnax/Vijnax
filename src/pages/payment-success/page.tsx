@@ -1,27 +1,73 @@
 
+import { useState, useEffect } from 'react';
+import { reportAPI } from '../../services/api';
+
 export default function PaymentSuccess() {
-  const handleDownloadReport = () => {
-    // Simulate PDF download
-    const link = document.createElement('a');
-    link.href = '#'; // In real app, this would be the PDF URL
-    link.download = 'Vijna-X-Psychometric-Report.pdf';
-    link.click();
+  const [downloading, setDownloading] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState(null);
+  const [testId, setTestId] = useState(null);
+
+  useEffect(() => {
+    // Get payment info from sessionStorage
+    const storedPaymentInfo = sessionStorage.getItem('paymentInfo');
+    const storedTestId = sessionStorage.getItem('currentTestId');
+    
+    if (storedPaymentInfo) {
+      setPaymentInfo(JSON.parse(storedPaymentInfo));
+    }
+    
+    if (storedTestId) {
+      setTestId(storedTestId);
+    }
+  }, []);
+
+  const handleDownloadReport = async () => {
+    if (!testId) {
+      alert('Test ID not found. Please contact support.');
+      return;
+    }
+
+    try {
+      setDownloading(true);
+      console.log('📥 Downloading PDF report for test:', testId);
+      
+      // Download PDF from backend
+      const blob = await reportAPI.downloadPDF(testId);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Career_Report_${testId.substring(0, 8)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      console.log('✅ PDF downloaded successfully');
+    } catch (error) {
+      console.error('❌ Download error:', error);
+      alert('Failed to download report. Please try again or contact support.');
+    } finally {
+      setDownloading(false);
+    }
   };
 
-  const handleSendToWhatsApp = () => {
-    // Simulate WhatsApp sharing
-    const message = "I've completed my Vijna X psychometric assessment! Check out my personalized career report.";
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
-  };
+  // Commented out for now
+  // const handleSendToWhatsApp = () => {
+  //   const message = "I've completed my Vijna X psychometric assessment! Check out my personalized career report.";
+  //   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  //   window.open(whatsappUrl, '_blank');
+  // };
 
-  const handleSendToEmail = () => {
-    // Simulate email sharing
-    const subject = "My Vijna X Psychometric Assessment Report";
-    const body = "Hi,\n\nI've completed my psychometric assessment with Vijna X. Please find my personalized career report attached.\n\nBest regards";
-    const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailtoUrl;
-  };
+  // const handleSendToEmail = () => {
+  //   const subject = "My Vijna X Psychometric Assessment Report";
+  //   const body = "Hi,\n\nI've completed my psychometric assessment with Vijna X. Please find my personalized career report attached.\n\nBest regards";
+  //   const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  //   window.location.href = mailtoUrl;
+  // };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center px-4">
@@ -45,19 +91,25 @@ export default function PaymentSuccess() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-gray-500">Transaction ID</p>
-                <p className="font-semibold text-gray-900">#VX2024001234</p>
+                <p className="font-semibold text-gray-900 text-xs break-all">
+                  {paymentInfo?.paymentId ? `#${paymentInfo.paymentId.substring(0, 20)}...` : '#VX2024001234'}
+                </p>
               </div>
               <div>
                 <p className="text-gray-500">Amount Paid</p>
-                <p className="font-semibold text-gray-900">₹199</p>
+                <p className="font-semibold text-gray-900">₹99</p>
               </div>
               <div>
                 <p className="text-gray-500">Payment Method</p>
-                <p className="font-semibold text-gray-900">UPI</p>
+                <p className="font-semibold text-gray-900">
+                  {paymentInfo?.method ? paymentInfo.method.toUpperCase() : 'UPI'}
+                </p>
               </div>
               <div>
                 <p className="text-gray-500">Date & Time</p>
-                <p className="font-semibold text-gray-900">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
+                <p className="font-semibold text-gray-900">
+                  {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
+                </p>
               </div>
             </div>
           </div>
@@ -97,12 +149,23 @@ export default function PaymentSuccess() {
           <div className="space-y-4">
             <button
               onClick={handleDownloadReport}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 whitespace-nowrap cursor-pointer"
+              disabled={downloading || !testId}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 disabled:transform-none whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
             >
-              <i className="ri-download-line w-6 h-6 flex items-center justify-center mr-2 inline-block"></i>
-              Download Report PDF
+              {downloading ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                  Generating PDF...
+                </div>
+              ) : (
+                <>
+                  <i className="ri-download-line w-6 h-6 flex items-center justify-center mr-2 inline-block"></i>
+                  Download Report PDF
+                </>
+              )}
             </button>
 
+            {/* Commented out for now
             <div className="grid md:grid-cols-2 gap-4">
               <button
                 onClick={handleSendToWhatsApp}
@@ -120,6 +183,7 @@ export default function PaymentSuccess() {
                 Send to Email
               </button>
             </div>
+            */}
           </div>
 
           {/* Support Information */}
