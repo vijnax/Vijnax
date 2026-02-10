@@ -844,10 +844,40 @@ router.post('/generate/randomized', verifyToken, async (req, res) => {
       questionNumber: idx + 1 // Renumber after shuffle
     }));
     
+    // ✅ CREATE TEST RECORD IMMEDIATELY when questions are loaded
+    const newTest = new Test({
+      userId: req.user.id,
+      testType: 'comprehensive',
+      status: 'started',
+      startedAt: new Date(),
+      questions: shuffledQuestions.map((q, idx) => ({
+        questionId: q.questionId,
+        order: idx + 1
+      })),
+      progress: {
+        totalQuestions: shuffledQuestions.length,
+        answeredCount: 0,
+        currentQuestion: 1,
+        timeSpent: 0,
+        timeRemaining: 3600
+      },
+      settings: {
+        timeLimit: 60,
+        allowBackNavigation: true,
+        showProgress: true,
+        randomizeQuestions: true,
+        showTimer: true
+      }
+    });
+    
+    await newTest.save();
+    console.log(`✅ Test created with ID: ${newTest._id} for user: ${req.user.id}`);
+    
     res.json({
       success: true,
       message: 'Test generated successfully with complete randomization',
       data: {
+        testId: newTest._id,  // ✅ Return test ID immediately!
         total: shuffledQuestions.length,
         sections: sections.map(s => ({
           section: s.section,
@@ -1076,50 +1106,65 @@ router.post('/submit', verifyToken, async (req, res) => {
   }
 });
 
-// Helper function to calculate test results
+// Helper function to calculate test results based on ACTUAL answers
 async function calculateTestResults(testQuestions) {
-  // Initialize scores
-  const scores = {
-    aptitude: 0,
-    values: 0,
-    personality: 0,
-    skills: 0
+  // Stream counters (based on mappedStream in options)
+  const streamScores = {
+    PCM: 0,
+    PCB: 0,
+    Commerce: 0,
+    Humanities: 0
   };
 
   const riasecProfile = { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 };
   const personalityProfile = { O: 0, C: 0, E: 0, A: 0, S: 0 };
+  
+  let aptitudeCount = 0, valuesCount = 0, personalityCount = 0, skillsCount = 0;
+  let aptitudeTotal = 0, valuesTotal = 0, personalityTotal = 0, skillsTotal = 0;
   
   // Fetch all questions with their scoring data
   const questionIds = testQuestions.map(tq => tq.questionId);
   const questions = await Question.find({ _id: { $in: questionIds } });
   const riasecQuestions = await RIASECQuestion.find({ _id: { $in: questionIds } });
   
-  // Create lookup maps
+  // Create lookup map
   const questionMap = {};
-  questions.forEach(q => {
-    questionMap[q._id.toString()] = q;
-  });
-  riasecQuestions.forEach(q => {
-    questionMap[q._id.toString()] = q;
-  });
+  questions.forEach(q => { questionMap[q._id.toString()] = q; });
+  riasecQuestions.forEach(q => { questionMap[q._id.toString()] = q; });
   
-  // Calculate scores based on actual answers
-  let totalScore = 0;
-  let maxScore = 0;
+  console.log(`📊 Calculating results for ${testQuestions.length} questions...`);
   
+  // Calculate scores based on ACTUAL answers
   testQuestions.forEach(tq => {
     const question = questionMap[tq.questionId.toString()];
     if (!question || !tq.answer) return;
     
     const selectedOption = question.options.find(opt => opt.text === tq.answer);
-    if (!selectedOption) return;
+    if (!selectedOption) {
+      console.warn(`⚠️  Answer not found in options: "${tq.answer}"`);
+      return;
+    }
     
-    // Add to domain scores
+    // STREAM SCORING (most important for career guidance)
+    if (selectedOption.mappedStream) {
+      streamScores[selectedOption.mappedStream] = (streamScores[selectedOption.mappedStream] || 0) + 1;
+    }
+    
+    // DOMAIN SCORING (for section-wise scores)
     const domain = question.domain;
-    if (domain === 'aptitude') scores.aptitude += selectedOption.score || 5;
-    else if (domain === 'values') scores.values += selectedOption.score || 5;
-    else if (domain === 'personality') scores.personality += selectedOption.score || 5;
-    else if (domain === 'skills') scores.skills += selectedOption.score || 5;
+    if (domain === 'aptitude') {
+      aptitudeTotal += selectedOption.score || 5;
+      aptitudeCount++;
+    } else if (domain === 'values') {
+      valuesTotal += selectedOption.score || 5;
+      valuesCount++;
+    } else if (domain === 'personality') {
+      personalityTotal += selectedOption.score || 5;
+      personalityCount++;
+    } else if (domain === 'skills') {
+      skillsTotal += selectedOption.score || 5;
+      skillsCount++;
+    }
     
     // RIASEC scoring
     if (selectedOption.riasecType) {
@@ -1130,27 +1175,49 @@ async function calculateTestResults(testQuestions) {
     if (selectedOption.mappedTrait) {
       personalityProfile[selectedOption.mappedTrait] = (personalityProfile[selectedOption.mappedTrait] || 0) + (selectedOption.score || 5);
     }
-    
-    totalScore += selectedOption.score || 5;
-    maxScore += 10;
   });
 
-  // Normalize scores to 0-100 scale
-  const normalize = (score, max) => Math.round((score / max) * 100) || 60;
+  // Calculate percentage scores
+  const scores = {
+    aptitude: aptitudeCount > 0 ? Math.round((aptitudeTotal / (aptitudeCount * 10)) * 100) : 65,
+    values: valuesCount > 0 ? Math.round((valuesTotal / (valuesCount * 10)) * 100) : 65,
+    personality: personalityCount > 0 ? Math.round((personalityTotal / (personalityCount * 10)) * 100) : 65,
+    skills: skillsCount > 0 ? Math.round((skillsTotal / (skillsCount * 10)) * 100) : 65
+  };
+
+  // Calculate stream percentages (normalized to 100)
+  const totalStreamAnswers = Object.values(streamScores).reduce((a, b) => a + b, 0);
+  const streamAnalysis = {};
   
-  scores.aptitude = normalize(scores.aptitude, maxScore / 4);
-  scores.values = normalize(scores.values, maxScore / 4);
-  scores.personality = normalize(scores.personality, maxScore / 4);
-  scores.skills = normalize(scores.skills, maxScore / 4);
+  if (totalStreamAnswers > 0) {
+    streamAnalysis['PCM (Science with Maths)'] = Math.round((streamScores.PCM / totalStreamAnswers) * 100);
+    streamAnalysis['PCB (Science with Biology)'] = Math.round((streamScores.PCB / totalStreamAnswers) * 100);
+    streamAnalysis['Commerce'] = Math.round((streamScores.Commerce / totalStreamAnswers) * 100);
+    streamAnalysis['Humanities'] = Math.round((streamScores.Humanities / totalStreamAnswers) * 100);
+  } else {
+    // Fallback if no mappedStream data
+    streamAnalysis['PCM (Science with Maths)'] = Math.round((scores.aptitude * 0.4) + (scores.values * 0.2) + (scores.personality * 0.2) + (scores.skills * 0.2));
+    streamAnalysis['PCB (Science with Biology)'] = Math.round((scores.aptitude * 0.3) + (scores.values * 0.3) + (scores.personality * 0.2) + (scores.skills * 0.2));
+    streamAnalysis['Commerce'] = Math.round((scores.values * 0.4) + (scores.personality * 0.3) + (scores.aptitude * 0.2) + (scores.skills * 0.1));
+    streamAnalysis['Humanities'] = Math.round((scores.personality * 0.4) + (scores.values * 0.3) + (scores.skills * 0.2) + (scores.aptitude * 0.1));
+  }
+
+  console.log('✅ Results calculated:');
+  console.log('   Stream Scores:', streamScores);
+  console.log('   Stream Analysis:', streamAnalysis);
+  console.log('   Domain Scores:', scores);
 
   return {
     scores,
+    streamAnalysis,
     riasecProfile,
     personalityProfile,
+    workValues: {}, // Can be calculated if needed
+    esiScore: scores.values, // ESI is part of values domain
     totalQuestions: testQuestions.length,
     answeredQuestions: testQuestions.filter(q => q.answer).length,
     completionPercentage: 100,
-    overallScore: normalize(totalScore, maxScore)
+    overallScore: Math.round((scores.aptitude + scores.values + scores.personality + scores.skills) / 4)
   };
 }
 

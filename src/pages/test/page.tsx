@@ -53,6 +53,15 @@ export default function Test() {
           throw new Error(json.message || 'Failed to generate test');
         }
         
+        // ✅ STORE TEST ID IMMEDIATELY when questions are loaded
+        const testId = json.data?.testId;
+        if (testId) {
+          sessionStorage.setItem('currentTestId', testId);
+          console.log('✅ Test ID stored in sessionStorage:', testId);
+        } else {
+          console.warn('⚠️ No test ID received from backend!');
+        }
+        
         // Map the questions from the new API format
         const apiQuestions = json.data?.questions || [];
         console.log('📋 First question structure:', apiQuestions[0]);  // Debug log
