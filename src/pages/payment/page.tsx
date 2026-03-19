@@ -45,7 +45,7 @@ export default function Payment() {
       console.log('💳 Creating Razorpay order...');
       
       // Step 1: Create order on backend
-      const orderResponse = await paymentAPI.createOrder(100); // ₹1 = 100 paise
+      const orderResponse = await paymentAPI.createOrder(9900); // ₹99 = 9900 paise
       
       if (!orderResponse.success) {
         throw new Error(orderResponse.message || 'Failed to create order');
@@ -94,7 +94,7 @@ export default function Payment() {
                 paymentId: response.razorpay_payment_id,
                 orderId: response.razorpay_order_id,
                 method: 'razorpay', // Will be updated from backend if available
-                amount: 1,
+                amount: 99,
                 timestamp: new Date().toISOString()
               }));
               
@@ -148,7 +148,7 @@ export default function Payment() {
           {/* Price Section */}
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 text-white text-center">
             <div className="mb-4">
-              <span className="text-4xl font-bold">₹1</span>
+              <span className="text-4xl font-bold">₹99</span>
               <span className="text-blue-200 line-through ml-2">₹499</span>
             </div>
             <p className="text-blue-100 mb-4">Limited Time Offer - 80% Off!</p>
@@ -214,7 +214,7 @@ export default function Payment() {
               ) : (
                 <>
                   <i className="ri-lock-line mr-2"></i>
-                  Pay ₹1 Securely
+                  Pay ₹99 Securely
                 </>
               )}
             </button>

@@ -166,7 +166,7 @@ export const userAPI = {
 // Payment API methods
 export const paymentAPI = {
   // Create Razorpay order
-  createOrder: (amount = 100, testId = null) => 
+  createOrder: (amount = 9900, testId = null) => 
     api.post('/payments/create-order', { amount, testId }),
   
   // Verify payment
