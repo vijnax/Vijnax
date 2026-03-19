@@ -79,7 +79,16 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
+// The verify callback preserves the raw body buffer on webhook requests
+// so Razorpay signature verification can HMAC the exact bytes that were signed.
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    if (req.originalUrl === '/api/payments/webhook') {
+      req.rawBody = buf;
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static files

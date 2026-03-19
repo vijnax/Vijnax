@@ -224,55 +224,134 @@ router.get('/history', verifyToken, async (req, res) => {
 
 // @route   POST /api/payments/webhook
 // @desc    Handle Razorpay webhook events
-// @access  Public (but verified with signature)
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+// @access  Public (verified with HMAC signature)
+router.post('/webhook', async (req, res) => {
   try {
     const webhookSignature = req.headers['x-razorpay-signature'];
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
-    if (webhookSecret) {
-      const generatedSignature = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(JSON.stringify(req.body))
-        .digest('hex');
-
-      if (generatedSignature !== webhookSignature) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid webhook signature'
-        });
-      }
+    if (!webhookSecret) {
+      console.error('RAZORPAY_WEBHOOK_SECRET is not configured — rejecting webhook');
+      return res.status(500).json({ success: false, message: 'Webhook not configured' });
     }
 
-    const event = req.body.event;
-    const payload = req.body.payload;
+    if (!webhookSignature) {
+      return res.status(400).json({ success: false, message: 'Missing x-razorpay-signature header' });
+    }
 
-    console.log(`📬 Razorpay webhook received: ${event}`);
+    // req.rawBody is set by the verify callback in express.json() (see server.js)
+    if (!req.rawBody) {
+      console.error('Raw body not available — verify callback may be misconfigured');
+      return res.status(500).json({ success: false, message: 'Raw body not captured' });
+    }
 
-    // Handle different webhook events
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(req.rawBody)
+      .digest('hex');
+
+    if (!crypto.timingSafeEqual(Buffer.from(expectedSignature, 'hex'), Buffer.from(webhookSignature, 'hex'))) {
+      console.error('Webhook signature mismatch — rejecting');
+      return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
+    }
+
+    const { event, payload } = req.body;
+    console.log(`Razorpay webhook received: ${event}`);
+
     switch (event) {
-      case 'payment.captured':
-        console.log(`✅ Payment captured: ${payload.payment.entity.id}`);
-        // Handle successful payment
+      case 'payment.captured': {
+        const payment = payload.payment.entity;
+        const paymentId = payment.id;
+        const orderId = payment.order_id;
+        const userId = payment.notes?.userId;
+        const testId = payment.notes?.testId;
+
+        // Idempotency: skip if this payment was already recorded
+        const alreadyRecorded = await User.findOne({ 'paymentHistory.paymentId': paymentId });
+        if (alreadyRecorded) {
+          console.log(`Payment ${paymentId} already processed — skipping`);
+          return res.json({ success: true });
+        }
+
+        if (userId) {
+          const user = await User.findById(userId);
+          if (user) {
+            user.paymentHistory.push({
+              paymentId,
+              orderId,
+              amount: payment.amount / 100,
+              currency: payment.currency,
+              status: 'completed',
+              method: payment.method,
+              testId: testId && testId !== 'new_test' ? testId : null,
+              date: new Date()
+            });
+            await user.save();
+            console.log(`Webhook: payment ${paymentId} recorded for user ${userId}`);
+          } else {
+            console.warn(`Webhook: user ${userId} not found for payment ${paymentId}`);
+          }
+        }
+
+        if (testId && testId !== 'new_test') {
+          await Test.findByIdAndUpdate(testId, {
+            'metadata.paymentId': paymentId,
+            'metadata.paymentStatus': 'completed',
+            'metadata.paidAmount': payment.amount / 100
+          });
+          console.log(`Webhook: test ${testId} marked as paid`);
+        }
+
         break;
-      
-      case 'payment.failed':
-        console.log(`❌ Payment failed: ${payload.payment.entity.id}`);
-        // Handle failed payment
+      }
+
+      case 'payment.failed': {
+        const failedPayment = payload.payment.entity;
+        const userId = failedPayment.notes?.userId;
+        const testId = failedPayment.notes?.testId;
+
+        console.log(`Payment failed: ${failedPayment.id}, reason: ${failedPayment.error_description || 'unknown'}`);
+
+        if (userId) {
+          const user = await User.findById(userId);
+          if (user) {
+            user.paymentHistory.push({
+              paymentId: failedPayment.id,
+              orderId: failedPayment.order_id,
+              amount: failedPayment.amount / 100,
+              currency: failedPayment.currency,
+              status: 'failed',
+              method: failedPayment.method || 'unknown',
+              testId: testId && testId !== 'new_test' ? testId : null,
+              date: new Date()
+            });
+            await user.save();
+          }
+        }
+
+        if (testId && testId !== 'new_test') {
+          await Test.findByIdAndUpdate(testId, {
+            'metadata.paymentStatus': 'failed'
+          });
+        }
+
         break;
-      
+      }
+
+      case 'order.paid': {
+        console.log(`Order paid: ${payload.order.entity.id}`);
+        break;
+      }
+
       default:
-        console.log(`ℹ️  Unhandled webhook event: ${event}`);
+        console.log(`Unhandled webhook event: ${event}`);
     }
 
     res.json({ success: true });
 
   } catch (error) {
-    console.error('❌ Webhook error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Webhook processing failed'
-    });
+    console.error('Webhook error:', error);
+    res.status(500).json({ success: false, message: 'Webhook processing failed' });
   }
 });
 

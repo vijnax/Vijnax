@@ -155,7 +155,14 @@ const testSchema = new mongoose.Schema({
       region: String,
       city: String
     },
-    sessionId: String
+    sessionId: String,
+    paymentId: String,
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'completed', 'failed'],
+      default: 'pending'
+    },
+    paidAmount: Number
   },
   startedAt: {
     type: Date,
