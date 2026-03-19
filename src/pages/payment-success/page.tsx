@@ -107,7 +107,7 @@ export default function PaymentSuccess() {
               </div>
               <div>
                 <p className="text-gray-500">Amount Paid</p>
-                <p className="font-semibold text-gray-900">₹99</p>
+                <p className="font-semibold text-gray-900">₹1</p>
               </div>
               <div>
                 <p className="text-gray-500">Payment Method</p>

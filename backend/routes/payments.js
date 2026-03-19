@@ -14,7 +14,7 @@ const razorpay = new Razorpay({
 });
 
 // Test amount (in paise - 1 INR = 100 paise)
-const TEST_AMOUNT = 9900; // ₹99
+const TEST_AMOUNT = 100; // ₹1 (temporary for live testing)
 
 // @route   POST /api/payments/create-order
 // @desc    Create Razorpay order for test payment
@@ -25,7 +25,7 @@ router.post('/create-order', verifyToken, async (req, res) => {
 
     // Create order options
     const options = {
-      amount: amount, // Amount in paise (₹99 = 9900 paise)
+      amount: amount, // Amount in paise (₹1 = 100 paise)
       currency: currency,
       receipt: `test_${testId || Date.now()}`,
       notes: {
