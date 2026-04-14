@@ -1,616 +1,370 @@
 import PDFDocument from 'pdfkit';
-import fs from 'fs';
-import path from 'path';
 
-/**
- * Generate Career Compass PDF Report
- * MODERN, BEAUTIFUL UI with professional styling
- */
-export async function generateCareerReport(testData, userData) {
-  return new Promise((resolve, reject) => {
-    try {
-      // Create a new PDF document with better margins
-      const doc = new PDFDocument({
-        size: 'A4',
-        margins: { top: 60, bottom: 60, left: 60, right: 60 }
-      });
+const PAGE = { w: 595, h: 842 };
+const MARGIN = 56;
+const CONTENT_W = PAGE.w - MARGIN * 2;
+const BOTTOM_SAFE = PAGE.h - MARGIN - 40;
 
-      // Collect chunks for buffer
-      const chunks = [];
-      doc.on('data', chunk => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+const colors = {
+  ink: '#111827',
+  muted: '#4B5563',
+  line: '#E5E7EB',
+  accent: '#1F2937'
+};
 
-      // Modern color palette
-      const colors = {
-        primary: '#4F46E5',      // Indigo
-        secondary: '#06B6D4',    // Cyan
-        success: '#10B981',      // Green
-        warning: '#F59E0B',      // Amber
-        danger: '#EF4444',       // Red
-        dark: '#1F2937',         // Gray-800
-        text: '#374151',         // Gray-700
-        textLight: '#6B7280',    // Gray-500
-        bg: '#F9FAFB',           // Gray-50
-        border: '#E5E7EB'        // Gray-200
-      };
-
-      // Helper functions for modern styling
-      const addGradientBox = (y, height, color1, color2) => {
-        // Simulate gradient with overlapping rectangles
-        for (let i = 0; i < height; i += 2) {
-          const opacity = 0.1 + (i / height) * 0.05;
-          doc.rect(60, y + i, 475, 2)
-             .fillOpacity(opacity)
-             .fill(color1);
-        }
-        doc.fillOpacity(1);
-      };
-
-      const addModernTitle = (text, size = 26) => {
-        doc.fontSize(size)
-           .font('Helvetica-Bold')
-           .fillColor(colors.primary)
-           .text(text, { align: 'center' });
-        doc.moveDown(0.3);
-      };
-
-      const addHeading = (text, size = 18) => {
-        doc.fontSize(size)
-           .font('Helvetica-Bold')
-           .fillColor(colors.dark)
-           .text(text);
-        doc.moveDown(0.4);
-      };
-
-      const addSubHeading = (text, size = 14) => {
-        doc.fontSize(size)
-           .font('Helvetica-Bold')
-           .fillColor(colors.text)
-           .text(text);
-        doc.moveDown(0.3);
-      };
-
-      const addText = (text, options = {}) => {
-        doc.fontSize(options.size || 11)
-           .font(options.bold ? 'Helvetica-Bold' : 'Helvetica')
-           .fillColor(options.color || colors.text)
-           .text(text, options);
-        doc.moveDown(0.4);
-      };
-
-      const addCard = (content, bgColor = colors.bg) => {
-        const startY = doc.y;
-        const cardPadding = 15;
-        
-        // Measure content height
-        const tempY = doc.y;
-        doc.y += cardPadding;
-        content();
-        const contentHeight = doc.y - tempY;
-        
-        // Draw card background
-        doc.rect(60, startY, 475, contentHeight + cardPadding)
-           .fillOpacity(0.5)
-           .fill(bgColor);
-        
-        // Reset and draw content
-        doc.fillOpacity(1);
-        doc.y = startY + cardPadding;
-        content();
-        doc.y += cardPadding;
-      };
-
-      const addProgressBar = (label, percentage, color) => {
-        const barWidth = 300;
-        const barHeight = 18;
-        const startX = 150;
-        const startY = doc.y;
-        
-        // Label
-        doc.fontSize(11)
-           .font('Helvetica-Bold')
-           .fillColor(colors.text)
-           .text(label, 60, startY);
-        
-        // Background bar
-        doc.roundedRect(startX, startY - 2, barWidth, barHeight, 9)
-           .fill(colors.border);
-        
-        // Filled bar
-        const fillWidth = (percentage / 100) * barWidth;
-        doc.roundedRect(startX, startY - 2, fillWidth, barHeight, 9)
-           .fill(color);
-        
-        // Percentage text
-        doc.fontSize(11)
-           .font('Helvetica-Bold')
-           .fillColor(colors.dark)
-           .text(`${Math.round(percentage)}%`, startX + barWidth + 15, startY, { width: 50 });
-        
-        doc.moveDown(1.2);
-      };
-
-      const addDivider = () => {
-        doc.moveTo(60, doc.y)
-           .lineTo(535, doc.y)
-           .lineWidth(1.5)
-           .strokeColor(colors.border)
-           .stroke();
-        doc.moveDown(0.8);
-      };
-
-      // ============= MODERN HEADER WITH GRADIENT =============
-      // Top gradient bar
-      doc.rect(0, 0, 595, 120)
-         .fillOpacity(0.95)
-         .fill(colors.primary);
-      doc.fillOpacity(1);
-      
-      // White title
-      doc.fontSize(28)
-         .font('Helvetica-Bold')
-         .fillColor('#FFFFFF')
-         .text('Career Compass', { align: 'center' });
-      
-      doc.fontSize(16)
-         .font('Helvetica')
-         .fillColor('#E0E7FF')
-         .text('Stream Selection & Career Guidance Report', { align: 'center' });
-      
-      doc.moveDown(3);
-
-      // Student Information Card
-      const infoBoxY = doc.y;
-      doc.roundedRect(60, infoBoxY, 475, 110, 8)
-         .fillOpacity(0.05)
-         .fill(colors.primary);
-      doc.fillOpacity(1);
-      
-      doc.roundedRect(60, infoBoxY, 475, 110, 8)
-         .lineWidth(2)
-         .strokeColor(colors.primary)
-         .stroke();
-      
-      doc.y = infoBoxY + 15;
-      doc.fontSize(13).font('Helvetica-Bold').fillColor(colors.dark);
-      doc.text(`Student: ${userData.name || 'N/A'}`, 80, doc.y);
-      doc.moveDown(0.6);
-      
-      doc.fontSize(11).font('Helvetica').fillColor(colors.text);
-      doc.text(`Class: ${userData.profile?.grade || 'N/A'}`, 80);
-      doc.moveDown(0.5);
-      doc.text(`School: ${userData.profile?.school || 'N/A'}`, 80);
-      doc.moveDown(0.5);
-      doc.text(`Date: ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`, 80);
-      doc.moveDown(0.5);
-      doc.text(`Assessment ID: ${testData._id.toString().substring(0, 12).toUpperCase()}`, 80);
-      
-      doc.y = infoBoxY + 125;
-      doc.moveDown();
-
-      // ============= EXECUTIVE SUMMARY WITH HIGHLIGHT BOX =============
-      addHeading('Executive Summary', 20);
-      
-      const streamScores = testData.results.streamAnalysis || calculateStreamScores(testData.results);
-      const primaryStream = Object.entries(streamScores).sort((a, b) => b[1] - a[1])[0];
-      const secondaryStream = Object.entries(streamScores).sort((a, b) => b[1] - a[1])[1];
-      
-      // Highlight box for recommendation
-      const summaryY = doc.y;
-      doc.roundedRect(60, summaryY, 475, 90, 8)
-         .fillOpacity(0.1)
-         .fill(colors.success);
-      doc.fillOpacity(1);
-      
-      doc.roundedRect(60, summaryY, 475, 90, 8)
-         .lineWidth(2)
-         .strokeColor(colors.success)
-         .stroke();
-      
-      doc.y = summaryY + 15;
-      doc.fontSize(14).font('Helvetica-Bold').fillColor(colors.dark);
-      doc.text('RECOMMENDED STREAM', 80);
-      doc.moveDown(0.5);
-      
-      doc.fontSize(20).font('Helvetica-Bold').fillColor(colors.success);
-      doc.text(primaryStream[0], 80);
-      doc.moveDown(0.4);
-      
-      doc.fontSize(11).font('Helvetica').fillColor(colors.text);
-      const confidenceLevel = primaryStream[1] > 75 ? 'HIGH' : primaryStream[1] > 60 ? 'MEDIUM' : 'MODERATE';
-      doc.text(`Confidence Level: ${confidenceLevel} | Secondary Option: ${secondaryStream[0]}`, 80);
-      
-      doc.y = summaryY + 100;
-      doc.moveDown();
-      
-      addText(
-        `Based on the comprehensive psychometric assessment, ${primaryStream[0]} emerges as the strongest fit, ` +
-        `combining aptitude strengths, personality traits, and career interests effectively. ` +
-        `${secondaryStream[0]} is recommended as a secondary option.`,
-        { size: 11 }
-      );
-
-      doc.moveDown();
-      addDivider();
-
-      // ============= STREAM FIT ANALYSIS WITH VISUAL BARS =============
-      doc.addPage();
-      
-      // Page header with gradient
-      doc.rect(0, 0, 595, 60)
-         .fillOpacity(0.05)
-         .fill(colors.primary);
-      doc.fillOpacity(1);
-      
-      doc.y = 75;
-      addHeading('Stream Fit Analysis', 22);
-      doc.moveDown(0.5);
-      
-      // Map short to long names for lookup
-      const streamMapping = {
-        'PCM': 'PCM (Science with Maths)',
-        'PCB': 'PCB (Science with Biology)',
-        'Commerce': 'Commerce',
-        'Humanities': 'Humanities'
-      };
-      
-      // Visual progress bars for each stream
-      const streams = ['PCM', 'PCB', 'Commerce', 'Humanities'];
-      
-      streams.forEach(stream => {
-        const longName = streamMapping[stream];
-        const score = streamScores[longName] || streamScores[stream] || 0;
-        const barColor = score > 70 ? colors.success : score > 55 ? colors.warning : colors.textLight;
-        
-        addProgressBar(stream, score, barColor);
-      });
-      
-      doc.moveDown();
-      addDivider();
-      
-      // Interpretation table with modern styling
-      addSubHeading('Interpretation Guide', 13);
-      doc.moveDown(0.3);
-      
-      const interpretations = [
-        { range: '70%+', level: 'Strong Fit', color: colors.success, text: 'Highly Recommended - Strong alignment with aptitude & interests' },
-        { range: '55-69%', level: 'Moderate Fit', color: colors.warning, text: 'Worth Considering - Good potential with focused effort' },
-        { range: '<55%', level: 'Weak Fit', color: colors.textLight, text: 'Not Recommended - Consider alternatives better suited to your profile' }
-      ];
-      
-      interpretations.forEach(interp => {
-        const boxY = doc.y;
-        doc.roundedRect(60, boxY, 475, 35, 5)
-           .fillOpacity(0.08)
-           .fill(interp.color);
-        doc.fillOpacity(1);
-        
-        doc.y = boxY + 8;
-        doc.fontSize(11).font('Helvetica-Bold').fillColor(interp.color);
-        doc.text(`${interp.range} - ${interp.level}`, 75, doc.y);
-        doc.moveDown(0.4);
-        doc.fontSize(9).font('Helvetica').fillColor(colors.text);
-        doc.text(interp.text, 75);
-        
-        doc.y = boxY + 40;
-      });
-
-      doc.moveDown();
-      addDivider();
-
-      // ============= DETAILED ANALYSIS SECTIONS =============
-      
-      // APTITUDE ANALYSIS with icon box
-      const aptBoxY = doc.y;
-      doc.roundedRect(60, aptBoxY, 475, 70, 8)
-         .fillOpacity(0.05)
-         .fill(colors.secondary);
-      doc.fillOpacity(1);
-      
-      doc.y = aptBoxY + 12;
-      addHeading('Aptitude Analysis', 16);
-      const aptitudeScores = testData.results.scores.aptitude || {};
-      const aptScore = testData.results.scores?.aptitude || 65;
-      addText(
-        `Strong aptitude in ${getTopAptitudeAreas(aptitudeScores).join(', ')} areas. ` +
-        `This indicates potential for success in analytical and problem-solving fields. Score: ${Math.round(aptScore)}%`,
-        { size: 11 }
-      );
-      doc.y = aptBoxY + 78;
-
-      // CAREER INTERESTS (RIASEC) with icon box
-      const riasecBoxY = doc.y;
-      doc.roundedRect(60, riasecBoxY, 475, 70, 8)
-         .fillOpacity(0.05)
-         .fill(colors.primary);
-      doc.fillOpacity(1);
-      
-      doc.y = riasecBoxY + 12;
-      addHeading('Career Interests (RIASEC)', 16);
-      const riasecScores = testData.results.riasecProfile || {};
-      const topInterests = getTopRIASECTypes(riasecScores);
-      addText(
-        `${topInterests.join(' and ')} orientations are dominant, suggesting strong interest in ` +
-        `careers that involve ${getRIASECDescription(topInterests)}.`,
-        { size: 11 }
-      );
-      doc.y = riasecBoxY + 78;
-
-      // PERSONALITY PROFILE with icon box
-      const persBoxY = doc.y;
-      doc.roundedRect(60, persBoxY, 475, 70, 8)
-         .fillOpacity(0.05)
-         .fill(colors.warning);
-      doc.fillOpacity(1);
-      
-      doc.y = persBoxY + 12;
-      addHeading('Personality Profile (Big Five)', 16);
-      const personalityScores = testData.results.personalityProfile || {};
-      const personalityTraits = getPersonalityDescription(personalityScores);
-      const persScore = testData.results.scores?.personality || 65;
-      addText(`${personalityTraits} Overall Score: ${Math.round(persScore)}%`, { size: 11 });
-      doc.y = persBoxY + 78;
-
-      // Decision-Making with mini bar
-      doc.moveDown();
-      addSubHeading('Decision-Making & Judgment', 14);
-      const decisionScore = testData.results.scores.values || 0;
-      addProgressBar('Decision Quality', decisionScore, decisionScore > 70 ? colors.success : colors.warning);
-      addText(
-        decisionScore > 70 
-          ? 'Strong ability to balance ethical reasoning and practical decision-making.'
-          : 'Moderate ability to balance ethical reasoning and practical decision-making. Continue building confidence.',
-        { size: 10 }
-      );
-
-      // ESI with mini bar
-      addSubHeading('Emotional & Social Intelligence', 14);
-      const esiScore = testData.results.esiScore || testData.results.scores.values || 0;
-      addProgressBar('ESI Score', esiScore, esiScore > 70 ? colors.success : colors.warning);
-      addText(
-        esiScore > 70
-          ? 'Displays strong empathy and teamwork skills. Excellent self-regulation under pressure.'
-          : 'Displays empathy and teamwork skills. Continue developing self-regulation under pressure.',
-        { size: 10 }
-      );
-
-      // Learning with mini bar
-      addSubHeading('Learning Orientation', 14);
-      const learningScore = testData.results.scores.skills || 0;
-      addProgressBar('Learning Style', learningScore, learningScore > 70 ? colors.success : colors.warning);
-      addText(
-        learningScore > 70
-          ? 'Prefers structured learning with strong persistence. Shows excellent self-directed study habits.'
-          : 'Prefers structured learning. Would benefit from developing more self-directed study habits.',
-        { size: 10 }
-      );
-
-      // Work Values
-      addSubHeading('Work Values & Lifestyle', 14);
-      const workValues = testData.results.workValues || {};
-      addText(getWorkValuesDescription(workValues), { size: 11 });
-
-      doc.moveDown();
-      addDivider();
-
-      // ============= INTEGRATED CAREER GUIDANCE =============
-      doc.addPage();
-      
-      // Page header
-      doc.rect(0, 0, 595, 60)
-         .fillOpacity(0.05)
-         .fill(colors.success);
-      doc.fillOpacity(1);
-      
-      doc.y = 75;
-      addHeading('Integrated Career Guidance', 22);
-      doc.moveDown();
-      
-      // Highlight recommendation box
-      const guidanceY = doc.y;
-      doc.roundedRect(60, guidanceY, 475, 100, 8)
-         .lineWidth(3)
-         .strokeColor(colors.success)
-         .stroke();
-      
-      doc.roundedRect(60, guidanceY, 475, 40, 8)
-         .fillOpacity(0.15)
-         .fill(colors.success);
-      doc.fillOpacity(1);
-      
-      doc.y = guidanceY + 12;
-      doc.fontSize(16).font('Helvetica-Bold').fillColor(colors.success);
-      doc.text(`PRIMARY RECOMMENDATION: ${primaryStream[0]}`, 80);
-      doc.moveDown(0.8);
-      
-      doc.fontSize(11).font('Helvetica').fillColor(colors.text);
-      doc.text(
-        `${primaryStream[0]} is the strongest recommendation, combining aptitude strengths, ` +
-        `personality traits, and career interests most effectively. ${secondaryStream[0]} ` +
-        `serves as a viable secondary option with ${Math.round(secondaryStream[1])}% alignment.`,
-        80, doc.y, { width: 435, align: 'justify' }
-      );
-      
-      doc.y = guidanceY + 110;
-      doc.moveDown(1.5);
-
-      // ============= PARENTAL NOTE =============
-      const parentY = doc.y;
-      doc.roundedRect(60, parentY, 475, 120, 8)
-         .fillOpacity(0.05)
-         .fill(colors.warning);
-      doc.fillOpacity(1);
-      
-      doc.roundedRect(60, parentY, 475, 120, 8)
-         .lineWidth(2)
-         .strokeColor(colors.warning)
-         .stroke();
-      
-      doc.y = parentY + 12;
-      addHeading('For Parents', 16);
-      doc.fontSize(11).font('Helvetica').fillColor(colors.text);
-      doc.text(
-        `Parents are advised to support ${userData.name || 'the student'} in exploring ` +
-        `${primaryStream[0]} pathways without undue pressure. While ${primaryStream[0]} shows ` +
-        `the strongest fit, ${secondaryStream[0]} may be considered if interests evolve. ` +
-        `\n\nEncourage balanced academics alongside personality development, extracurricular ` +
-        `activities, and healthy routines. Career success depends on effort, resilience, ` +
-        `and continuous learning beyond stream selection.`,
-        75, doc.y, { width: 445, align: 'justify', lineGap: 3 }
-      );
-      
-      doc.y = parentY + 130;
-      doc.moveDown(1.5);
-
-      addDivider();
-
-      // ============= DISCLAIMER WITH MODERN STYLING =============
-      const disclaimerY = doc.y;
-      doc.roundedRect(60, disclaimerY, 475, 180, 8)
-         .fillOpacity(0.03)
-         .fill(colors.dark);
-      doc.fillOpacity(1);
-      
-      doc.y = disclaimerY + 12;
-      addHeading('Important Disclaimer', 15);
-      
-      doc.fontSize(10).font('Helvetica').fillColor(colors.text);
-      addText(
-        'This report is based on a scientifically designed psychometric assessment. ' +
-        'Recommendations indicate best-fit academic streams based on responses across ' +
-        'aptitude, interests, personality, values, and decision-making dimensions.',
-        { size: 10 }
-      );
-      
-      const disclaimerPoints = [
-        '* Results should be used as guidance, not a final verdict',
-        '* Student motivation, effort, and learning can significantly influence outcomes',
-        '* Recommended stream may change as student develops new skills and interests',
-        '* Assessment does not measure board exam performance or guarantee admissions',
-        '* Consider insights alongside academic records and personal aspirations'
-      ];
-      
-      disclaimerPoints.forEach(point => {
-        doc.fontSize(9).font('Helvetica').fillColor(colors.textLight);
-        addText(point, { size: 9 });
-      });
-
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(colors.text)
-         .text('This report is intended to assist, not replace, informed parental and student choice.', 
-               75, doc.y, { align: 'center', width: 445 });
-
-      // ============= MODERN FOOTER =============
-      const footerY = doc.page.height - 50;
-      doc.rect(0, footerY - 20, 595, 70)
-         .fillOpacity(0.95)
-         .fill(colors.primary);
-      doc.fillOpacity(1);
-      
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#FFFFFF')
-         .text('Career Compass', 0, footerY, { align: 'center', width: 595 });
-      doc.fontSize(9).font('Helvetica').fillColor('#E0E7FF')
-         .text('Powered by Vijnax (C) 2026 | Empowering Students, Guiding Futures', 
-               0, footerY + 18, { align: 'center', width: 595 });
-
-      // Finalize PDF
-      doc.end();
-
-    } catch (error) {
-      reject(error);
-    }
-  });
+function clampPct(n) {
+  const x = Number(n);
+  if (Number.isNaN(x)) return 0;
+  return Math.max(0, Math.min(100, Math.round(x)));
 }
 
-// ============= HELPER FUNCTIONS =============
+function assessmentId(testData) {
+  const id = testData?._id;
+  if (!id) return 'N/A';
+  const s = typeof id === 'string' ? id : id.toString();
+  return s.length >= 12 ? s.slice(0, 12).toUpperCase() : s.toUpperCase();
+}
 
-function calculateStreamScores(results) {
-  const { scores } = results;
-  
-  // Calculate stream alignment based on section scores
-  const pcmScore = (scores.aptitude * 0.4) + (scores.values * 0.2) + (scores.personality * 0.2) + (scores.skills * 0.2);
-  const pcbScore = (scores.aptitude * 0.3) + (scores.values * 0.3) + (scores.personality * 0.2) + (scores.skills * 0.2);
-  const commerceScore = (scores.values * 0.4) + (scores.personality * 0.3) + (scores.aptitude * 0.2) + (scores.skills * 0.1);
-  const humanitiesScore = (scores.personality * 0.4) + (scores.values * 0.3) + (scores.skills * 0.2) + (scores.aptitude * 0.1);
-  
+/** Same weighting as routes/reports.js when stream votes are unavailable */
+function computeStreamScoresFromDomains(results) {
+  const s = results?.scores || {};
+  const aptitude = s.aptitude || 0;
+  const values = s.values || 0;
+  const personality = s.personality || 0;
+  const skills = s.skills || 0;
+
   return {
-    'PCM (Science with Maths)': Math.min(pcmScore, 100),
-    'PCB (Science with Biology)': Math.min(pcbScore, 100),
-    'Commerce': Math.min(commerceScore, 100),
-    'Humanities': Math.min(humanitiesScore, 100)
+    'PCM (Science with Maths)': Math.min(
+      Math.round(aptitude * 0.4 + values * 0.2 + personality * 0.2 + skills * 0.2),
+      100
+    ),
+    'PCB (Science with Biology)': Math.min(
+      Math.round(aptitude * 0.3 + values * 0.3 + personality * 0.2 + skills * 0.2),
+      100
+    ),
+    Commerce: Math.min(
+      Math.round(values * 0.4 + personality * 0.3 + aptitude * 0.2 + skills * 0.1),
+      100
+    ),
+    Humanities: Math.min(
+      Math.round(personality * 0.4 + values * 0.3 + skills * 0.2 + aptitude * 0.1),
+      100
+    )
   };
 }
 
-function getTopAptitudeAreas(aptitudeScores) {
-  const areas = {
-    numerical: 'Numerical Reasoning',
-    logical: 'Logical Thinking',
-    verbal: 'Verbal Comprehension',
-    spatial: 'Spatial Ability'
-  };
-  
-  return Object.keys(areas).slice(0, 2).map(key => areas[key]);
+function getStreamScores(results) {
+  const raw = results?.streamAnalysis;
+  if (raw && typeof raw === 'object' && Object.keys(raw).length > 0) {
+    return raw;
+  }
+  return computeStreamScoresFromDomains(results);
 }
 
-function getTopRIASECTypes(riasecScores) {
-  const types = {
-    R: 'Realistic',
-    I: 'Investigative',
-    A: 'Artistic',
-    S: 'Social',
-    E: 'Enterprising',
-    C: 'Conventional'
-  };
-  
-  const sorted = Object.entries(riasecScores)
+function sortedStreams(streamScores) {
+  return Object.entries(streamScores)
+    .filter(([, v]) => typeof v === 'number' && !Number.isNaN(v))
+    .sort((a, b) => b[1] - a[1]);
+}
+
+function riasecPercentages(riasecProfile) {
+  const p = riasecProfile && typeof riasecProfile === 'object' ? riasecProfile : {};
+  const total = Object.values(p).reduce((a, b) => a + (Number(b) || 0), 0);
+  if (total <= 0) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(p)) {
+    out[k] = Math.round(((Number(v) || 0) / total) * 100);
+  }
+  return out;
+}
+
+const RIASEC_LABELS = {
+  R: 'Realistic',
+  I: 'Investigative',
+  A: 'Artistic',
+  S: 'Social',
+  E: 'Enterprising',
+  C: 'Conventional'
+};
+
+function topRiasecLabels(riasecProfile, n = 2) {
+  const pct = riasecPercentages(riasecProfile);
+  if (!pct) return [];
+  return Object.entries(pct)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 2);
-  
-  return sorted.map(([key]) => types[key] || key);
+    .slice(0, n)
+    .map(([k]) => RIASEC_LABELS[k] || k);
+}
+
+function riasecNarrative(riasecProfile) {
+  const top = topRiasecLabels(riasecProfile, 2);
+  if (!top.length) {
+    return 'Career-interest profile reflects the mix of responses across RIASEC dimensions.';
+  }
+  const desc = getRIASECDescription(top);
+  return `Strongest interest themes: ${top.join(' and ')} — ${desc}.`;
+}
+
+const BIG_FIVE_LABELS = {
+  O: 'Openness',
+  C: 'Conscientiousness',
+  E: 'Extraversion',
+  A: 'Agreeableness',
+  S: 'Emotional stability'
+};
+
+function personalityNarrative(personalityProfile) {
+  const p = personalityProfile && typeof personalityProfile === 'object' ? personalityProfile : {};
+  const entries = Object.entries(p).filter(([, v]) => typeof v === 'number' && v > 0);
+  if (!entries.length) {
+    return 'Personality pattern is balanced across the assessed Big Five dimensions.';
+  }
+  const max = Math.max(...entries.map(([, v]) => v));
+  const threshold = max * 0.85;
+  const strong = entries
+    .filter(([, v]) => v >= threshold)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k]) => BIG_FIVE_LABELS[k] || k)
+    .slice(0, 3);
+  if (!strong.length) {
+    return 'Personality scores are relatively even across dimensions.';
+  }
+  return `Relatively elevated themes: ${strong.join(', ')} (based on weighted responses).`;
+}
+
+function workValuesLine(workValues) {
+  const w = workValues && typeof workValues === 'object' ? workValues : {};
+  const keys = Object.keys(w).filter((k) => typeof w[k] === 'number');
+  if (!keys.length) {
+    return 'Work-values subscores were not stored separately for this assessment; values-related responses contribute to the Values domain score above.';
+  }
+  return getWorkValuesDescription(w);
 }
 
 function getRIASECDescription(interests) {
   const descriptions = {
-    'Realistic': 'hands-on work and practical applications',
-    'Investigative': 'research, analysis, and problem-solving',
-    'Artistic': 'creativity, design, and self-expression',
-    'Social': 'helping others and collaborative work',
-    'Enterprising': 'leadership, entrepreneurship, and persuasion',
-    'Conventional': 'organization, data management, and structured tasks'
+    Realistic: 'hands-on and practical work',
+    Investigative: 'analysis, inquiry, and problem-solving',
+    Artistic: 'creativity and expressive work',
+    Social: 'helping people and collaboration',
+    Enterprising: 'leadership and persuasion',
+    Conventional: 'structure, systems, and organization'
   };
-  
-  return interests.map(i => descriptions[i] || 'diverse activities').join(' and ');
-}
-
-function getPersonalityDescription(personalityScores) {
-  const traits = [];
-  
-  if ((personalityScores.C || 0) > 60) traits.push('conscientious and disciplined');
-  if ((personalityScores.O || 0) > 60) traits.push('open to new experiences');
-  if ((personalityScores.A || 0) > 60) traits.push('agreeable and cooperative');
-  if ((personalityScores.E || 0) > 60) traits.push('extraverted and sociable');
-  if ((personalityScores.S || 0) > 60) traits.push('emotionally stable');
-  
-  if (traits.length === 0) return 'Shows balanced personality traits across all dimensions.';
-  
-  return `Exhibits ${traits.join(', ')} personality traits, which align well with academic and career success.`;
+  return interests.map((i) => descriptions[i] || 'varied activities').join(' and ');
 }
 
 function getWorkValuesDescription(workValues) {
   const topValue = Object.entries(workValues)
+    .filter(([, v]) => typeof v === 'number')
     .sort((a, b) => b[1] - a[1])[0];
-  
-  if (!topValue) return 'Values balanced approach to work and life.';
-  
+
+  if (!topValue) return 'Balanced orientation across assessed work-value themes.';
+
   const descriptions = {
-    achievement: 'strong drive for accomplishment and recognition',
-    stability: 'preference for security and structured environments',
-    creativity: 'desire for innovation and self-expression',
-    helping: 'commitment to service and supporting others',
-    leadership: 'inclination toward influence and decision-making'
+    achievement: 'achievement and mastery',
+    stability: 'stability and structure',
+    creativity: 'creativity and autonomy',
+    helping: 'service and collaboration',
+    leadership: 'influence and responsibility'
   };
-  
-  return `Values ${descriptions[topValue[0]] || 'meaningful work'}. Prefers collaborative settings with clear goals.`;
+
+  return `Leading theme: ${descriptions[topValue[0]] || topValue[0].replace(/_/g, ' ')}.`;
+}
+
+/**
+ * Career Compass PDF — minimal layout, wrapped text, pagination, data aligned to test.results.
+ */
+export async function generateCareerReport(testData, userData) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+        bufferPages: true
+      });
+
+      const chunks = [];
+      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const results = testData?.results || {};
+      const scores = results.scores || {};
+      const streamScores = getStreamScores(results);
+      const ranked = sortedStreams(streamScores);
+      const primary = ranked[0] || ['Primary stream', 0];
+      const secondary = ranked[1] || ['Secondary stream', 0];
+
+      const name = (userData && (userData.name || userData?.profile?.name)) || 'Student';
+      const grade = userData?.profile?.grade;
+      const school = userData?.profile?.school;
+
+      const aptitudePct = clampPct(scores.aptitude);
+      const valuesPct = clampPct(scores.values);
+      const personalityPct = clampPct(scores.personality);
+      const skillsPct = clampPct(scores.skills);
+      const esiPct = clampPct(results.esiScore != null ? results.esiScore : scores.values);
+
+      let y = MARGIN;
+
+      const ensureSpace = (needed) => {
+        if (y + needed > BOTTOM_SAFE) {
+          doc.addPage();
+          y = MARGIN;
+        }
+      };
+
+      const line = (text, opts = {}) => {
+        const fs = opts.size || 10;
+        const font = opts.bold ? 'Helvetica-Bold' : 'Helvetica';
+        const color = opts.color || colors.ink;
+        const leading = opts.leading || fs * 1.35;
+        doc.font(font).fontSize(fs).fillColor(color);
+        const h = doc.heightOfString(String(text), {
+          width: CONTENT_W,
+          align: opts.align || 'left',
+          lineGap: opts.lineGap ?? 2
+        });
+        ensureSpace(h + 6);
+        doc.text(String(text), MARGIN, y, {
+          width: CONTENT_W,
+          align: opts.align || 'left',
+          lineGap: opts.lineGap ?? 2
+        });
+        y = doc.y + (opts.after || 10);
+      };
+
+      const rule = () => {
+        ensureSpace(16);
+        doc.moveTo(MARGIN, y).lineTo(PAGE.w - MARGIN, y).strokeColor(colors.line).lineWidth(0.5).stroke();
+        y += 14;
+      };
+
+      const barRow = (label, pct) => {
+        const p = clampPct(pct);
+        const barH = 6;
+        const barW = CONTENT_W - 120;
+        const labelH = 14;
+        ensureSpace(28);
+        doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(label, MARGIN, y, { width: 110 });
+        doc.rect(MARGIN + 115, y + 3, barW, barH).fillColor(colors.line).fill();
+        doc.rect(MARGIN + 115, y + 3, (barW * p) / 100, barH).fillColor(colors.accent).fill();
+        doc.font('Helvetica-Bold').fontSize(9).fillColor(colors.ink).text(`${p}%`, MARGIN + 115 + barW + 8, y + 1, {
+          width: 40,
+          align: 'right'
+        });
+        y += 22;
+      };
+
+      // --- Page header block ---
+      doc.font('Helvetica-Bold').fontSize(20).fillColor(colors.ink).text('Career Compass', MARGIN, y, {
+        width: CONTENT_W,
+        align: 'left'
+      });
+      y = doc.y + 4;
+      line('Stream selection report', { size: 11, color: colors.muted, after: 6 });
+      rule();
+
+      line(`Student: ${name}`, { size: 11, bold: true });
+      if (grade) line(`Class / grade: ${grade}`, { size: 10 });
+      if (school) line(`School: ${school}`, { size: 10 });
+      line(
+        `Report date: ${new Date().toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        })}`,
+        { size: 10, color: colors.muted }
+      );
+      line(`Assessment ID: ${assessmentId(testData)}`, { size: 10, color: colors.muted });
+      if (testData.completedAt) {
+        line(`Completed: ${new Date(testData.completedAt).toLocaleDateString('en-IN')}`, {
+          size: 10,
+          color: colors.muted
+        });
+      }
+
+      rule();
+      line('Summary', { size: 12, bold: true, after: 6 });
+
+      const conf =
+        primary[1] > 75 ? 'High' : primary[1] > 60 ? 'Medium' : primary[1] > 0 ? 'Moderate' : '—';
+      line(
+        `Primary recommendation: ${primary[0]} (${clampPct(primary[1])}%). ` +
+          `Secondary: ${secondary[0]} (${clampPct(secondary[1])}%). ` +
+          `Confidence band: ${conf} (based on stream fit scores in this report).`,
+        { size: 10, leading: 14 }
+      );
+
+      rule();
+      line('Stream fit', { size: 12, bold: true, after: 8 });
+
+      const streamLabels = [
+        ['PCM (Science with Maths)', 'PCM'],
+        ['PCB (Science with Biology)', 'PCB'],
+        ['Commerce', 'Commerce'],
+        ['Humanities', 'Humanities']
+      ];
+      for (const [longKey, shortKey] of streamLabels) {
+        const v = streamScores[longKey] ?? streamScores[shortKey];
+        barRow(longKey, v ?? 0);
+      }
+
+      ensureSpace(40);
+      rule();
+      line('Domain scores', { size: 12, bold: true, after: 8 });
+      line(
+        'Percentages reflect your responses within each scored domain. Skills includes learning-orientation items.',
+        { size: 9, color: colors.muted, leading: 12 }
+      );
+      barRow('Aptitude', aptitudePct);
+      barRow('Values', valuesPct);
+      barRow('Personality (Big Five)', personalityPct);
+      barRow('Skills & learning', skillsPct);
+      if (results.esiScore != null && results.esiScore !== scores.values) {
+        barRow('Emotional & social index (stored)', esiPct);
+      } else {
+        line('Note: ESI-style items are scored within the Values domain for this test version.', {
+          size: 9,
+          color: colors.muted,
+          leading: 12
+        });
+      }
+
+      ensureSpace(36);
+      rule();
+      line('Profile detail', { size: 12, bold: true, after: 6 });
+      line(`Aptitude index: ${aptitudePct}% overall.`, { size: 10 });
+      line(riasecNarrative(results.riasecProfile), { size: 10, leading: 14 });
+      line(personalityNarrative(results.personalityProfile), { size: 10, leading: 14 });
+      line(workValuesLine(results.workValues), { size: 10, leading: 14 });
+
+      if (results.overallScore != null) {
+        line(`Overall composite: ${clampPct(results.overallScore)}%.`, { size: 10, color: colors.muted });
+      }
+
+      ensureSpace(60);
+      rule();
+      line('Disclaimer', { size: 12, bold: true, after: 6 });
+      line(
+        'This report summarises automated scores from your assessment. It is guidance only—not a prediction of exam results, admissions, or career outcomes. Discuss results with parents, teachers, or a qualified counsellor.',
+        { size: 9, color: colors.muted, leading: 13 }
+      );
+
+      const range = doc.bufferedPageRange();
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        doc.font('Helvetica').fontSize(8).fillColor(colors.muted).text('Career Compass · Vijnax', MARGIN, PAGE.h - 32, {
+          width: CONTENT_W,
+          align: 'center'
+        });
+      }
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 export default { generateCareerReport };
