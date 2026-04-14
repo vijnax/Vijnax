@@ -110,11 +110,8 @@ router.get('/:testId/pdf', verifyToken, async (req, res) => {
 
     console.log(`📄 Generating PDF report for test ${testId}...`);
 
-    // Prefer stream analysis persisted at submit time; only compute if missing
-    const existingStreams = test.results?.streamAnalysis;
-    if (!existingStreams || typeof existingStreams !== 'object' || Object.keys(existingStreams).length === 0) {
-      test.results.streamAnalysis = calculateStreamAnalysis(test.results);
-    }
+    // Add stream analysis to results
+    test.results.streamAnalysis = calculateStreamAnalysis(test.results);
 
     // Generate PDF
     const pdfBuffer = await generateCareerReport(test, test.userId);

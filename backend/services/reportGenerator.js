@@ -1,365 +1,429 @@
 import PDFDocument from 'pdfkit';
 
-const PAGE = { w: 595, h: 842 };
-const MARGIN = 56;
-const CONTENT_W = PAGE.w - MARGIN * 2;
-const BOTTOM_SAFE = PAGE.h - MARGIN - 40;
+/**
+ * Career Compass PDF — clean layout, safe pagination, data aligned with test results
+ */
 
-const colors = {
-  ink: '#111827',
-  muted: '#4B5563',
-  line: '#E5E7EB',
-  accent: '#1F2937'
+const PAGE = { w: 595.28, h: 841.89 };
+const M = { top: 56, bottom: 56, left: 50, right: 50 };
+const CONTENT_W = PAGE.w - M.left - M.right;
+const FOOTER_RESERVE = 48;
+const COLORS = {
+  primary: '#1e3a5f',
+  accent: '#2563eb',
+  muted: '#64748b',
+  text: '#334155',
+  border: '#e2e8f0',
+  band: '#f1f5f9'
 };
 
+function num(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function clampPct(n) {
-  const x = Number(n);
-  if (Number.isNaN(x)) return 0;
-  return Math.max(0, Math.min(100, Math.round(x)));
+  return Math.min(100, Math.max(0, Math.round(num(n, 0))));
 }
 
-function assessmentId(testData) {
-  const id = testData?._id;
-  if (!id) return 'N/A';
-  const s = typeof id === 'string' ? id : id.toString();
-  return s.length >= 12 ? s.slice(0, 12).toUpperCase() : s.toUpperCase();
+function testIdShort(testData) {
+  try {
+    const id = testData?._id;
+    const s = id && typeof id.toString === 'function' ? id.toString() : String(id || '');
+    return s.replace(/[^a-f0-9]/gi, '').slice(0, 12).toUpperCase() || 'N/A';
+  } catch {
+    return 'N/A';
+  }
 }
 
-/** Same weighting as routes/reports.js when stream votes are unavailable */
-function computeStreamScoresFromDomains(results) {
+/** Same weighting as routes/reports.js calculateStreamAnalysis */
+function computeStreamAnalysisFromScores(results) {
   const s = results?.scores || {};
-  const aptitude = s.aptitude || 0;
-  const values = s.values || 0;
-  const personality = s.personality || 0;
-  const skills = s.skills || 0;
+  const aptitude = num(s.aptitude, 0);
+  const values = num(s.values, 0);
+  const personality = num(s.personality, 0);
+  const skills = num(s.skills, 0);
 
   return {
     'PCM (Science with Maths)': Math.min(
-      Math.round(aptitude * 0.4 + values * 0.2 + personality * 0.2 + skills * 0.2),
-      100
+      100,
+      Math.round(aptitude * 0.4 + values * 0.2 + personality * 0.2 + skills * 0.2)
     ),
     'PCB (Science with Biology)': Math.min(
-      Math.round(aptitude * 0.3 + values * 0.3 + personality * 0.2 + skills * 0.2),
-      100
+      100,
+      Math.round(aptitude * 0.3 + values * 0.3 + personality * 0.2 + skills * 0.2)
     ),
     Commerce: Math.min(
-      Math.round(values * 0.4 + personality * 0.3 + aptitude * 0.2 + skills * 0.1),
-      100
+      100,
+      Math.round(values * 0.4 + personality * 0.3 + aptitude * 0.2 + skills * 0.1)
     ),
     Humanities: Math.min(
-      Math.round(personality * 0.4 + values * 0.3 + skills * 0.2 + aptitude * 0.1),
-      100
+      100,
+      Math.round(personality * 0.4 + values * 0.3 + skills * 0.2 + aptitude * 0.1)
     )
   };
 }
 
-function getStreamScores(results) {
-  const raw = results?.streamAnalysis;
-  if (raw && typeof raw === 'object' && Object.keys(raw).length > 0) {
-    return raw;
+function resolveStreamScores(testData) {
+  const r = testData?.results || {};
+  const existing = r.streamAnalysis;
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    const entries = Object.entries(existing).filter(([, v]) => Number.isFinite(Number(v)));
+    if (entries.length >= 2) {
+      return Object.fromEntries(entries.map(([k, v]) => [k, clampPct(v)]));
+    }
   }
-  return computeStreamScoresFromDomains(results);
+  return computeStreamAnalysisFromScores(r);
 }
 
 function sortedStreams(streamScores) {
-  return Object.entries(streamScores)
-    .filter(([, v]) => typeof v === 'number' && !Number.isNaN(v))
+  return Object.entries(streamScores || {})
+    .map(([name, v]) => [name, clampPct(v)])
+    .filter(([, v]) => Number.isFinite(v))
     .sort((a, b) => b[1] - a[1]);
 }
 
-function riasecPercentages(riasecProfile) {
-  const p = riasecProfile && typeof riasecProfile === 'object' ? riasecProfile : {};
-  const total = Object.values(p).reduce((a, b) => a + (Number(b) || 0), 0);
-  if (total <= 0) return null;
-  const out = {};
-  for (const [k, v] of Object.entries(p)) {
-    out[k] = Math.round(((Number(v) || 0) / total) * 100);
+function getTopRIASECTypes(riasecScores) {
+  const types = {
+    R: 'Realistic',
+    I: 'Investigative',
+    A: 'Artistic',
+    S: 'Social',
+    E: 'Enterprising',
+    C: 'Conventional'
+  };
+  const sorted = Object.entries(riasecScores || {})
+    .filter(([, v]) => num(v, 0) > 0)
+    .sort((a, b) => num(b[1], 0) - num(a[1], 0))
+    .slice(0, 2);
+  if (sorted.length === 0) {
+    return ['Balanced', 'Balanced'];
   }
-  return out;
-}
-
-const RIASEC_LABELS = {
-  R: 'Realistic',
-  I: 'Investigative',
-  A: 'Artistic',
-  S: 'Social',
-  E: 'Enterprising',
-  C: 'Conventional'
-};
-
-function topRiasecLabels(riasecProfile, n = 2) {
-  const pct = riasecPercentages(riasecProfile);
-  if (!pct) return [];
-  return Object.entries(pct)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, n)
-    .map(([k]) => RIASEC_LABELS[k] || k);
-}
-
-function riasecNarrative(riasecProfile) {
-  const top = topRiasecLabels(riasecProfile, 2);
-  if (!top.length) {
-    return 'Career-interest profile reflects the mix of responses across RIASEC dimensions.';
-  }
-  const desc = getRIASECDescription(top);
-  return `Strongest interest themes: ${top.join(' and ')} — ${desc}.`;
-}
-
-const BIG_FIVE_LABELS = {
-  O: 'Openness',
-  C: 'Conscientiousness',
-  E: 'Extraversion',
-  A: 'Agreeableness',
-  S: 'Emotional stability'
-};
-
-function personalityNarrative(personalityProfile) {
-  const p = personalityProfile && typeof personalityProfile === 'object' ? personalityProfile : {};
-  const entries = Object.entries(p).filter(([, v]) => typeof v === 'number' && v > 0);
-  if (!entries.length) {
-    return 'Personality pattern is balanced across the assessed Big Five dimensions.';
-  }
-  const max = Math.max(...entries.map(([, v]) => v));
-  const threshold = max * 0.85;
-  const strong = entries
-    .filter(([, v]) => v >= threshold)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k]) => BIG_FIVE_LABELS[k] || k)
-    .slice(0, 3);
-  if (!strong.length) {
-    return 'Personality scores are relatively even across dimensions.';
-  }
-  return `Relatively elevated themes: ${strong.join(', ')} (based on weighted responses).`;
-}
-
-function workValuesLine(workValues) {
-  const w = workValues && typeof workValues === 'object' ? workValues : {};
-  const keys = Object.keys(w).filter((k) => typeof w[k] === 'number');
-  if (!keys.length) {
-    return 'Work-values subscores were not stored separately for this assessment; values-related responses contribute to the Values domain score above.';
-  }
-  return getWorkValuesDescription(w);
+  return sorted.map(([key]) => types[key] || key);
 }
 
 function getRIASECDescription(interests) {
   const descriptions = {
-    Realistic: 'hands-on and practical work',
-    Investigative: 'analysis, inquiry, and problem-solving',
-    Artistic: 'creativity and expressive work',
-    Social: 'helping people and collaboration',
-    Enterprising: 'leadership and persuasion',
-    Conventional: 'structure, systems, and organization'
+    Realistic: 'hands-on work and practical applications',
+    Investigative: 'research, analysis, and problem-solving',
+    Artistic: 'creativity, design, and self-expression',
+    Social: 'helping others and collaborative work',
+    Enterprising: 'leadership, entrepreneurship, and persuasion',
+    Conventional: 'organization, data management, and structured tasks',
+    Balanced: 'a wide range of career environments'
   };
-  return interests.map((i) => descriptions[i] || 'varied activities').join(' and ');
+  return interests.map(i => descriptions[i] || 'diverse activities').join(' and ');
+}
+
+/** Personality sums are raw totals from options; compare relatively. */
+function getPersonalityDescription(personalityScores) {
+  const raw = personalityScores || {};
+  const entries = Object.entries(raw).filter(([, v]) => num(v, 0) > 0);
+  if (entries.length === 0) {
+    return 'Personality responses indicate a balanced profile across measured dimensions.';
+  }
+  const maxVal = Math.max(...entries.map(([, v]) => num(v, 0)), 1);
+  const labels = {
+    O: 'openness to experience',
+    C: 'conscientiousness',
+    E: 'extraversion',
+    A: 'agreeableness',
+    S: 'emotional stability'
+  };
+  const ranked = entries
+    .map(([k, v]) => ({ k, v: num(v, 0), rel: num(v, 0) / maxVal }))
+    .sort((a, b) => b.v - a.v);
+  const top = ranked.slice(0, 2).map(x => labels[x.k] || x.k).filter(Boolean);
+  if (top.length === 0) {
+    return 'Personality responses indicate a balanced profile across measured dimensions.';
+  }
+  return `Relative strengths appear in ${top.join(' and ')}, compared with your other trait scores in this assessment.`;
 }
 
 function getWorkValuesDescription(workValues) {
-  const topValue = Object.entries(workValues)
-    .filter(([, v]) => typeof v === 'number')
-    .sort((a, b) => b[1] - a[1])[0];
-
-  if (!topValue) return 'Balanced orientation across assessed work-value themes.';
-
+  const wv = workValues || {};
+  const entries = Object.entries(wv).filter(([, v]) => num(v, 0) > 0);
+  if (entries.length === 0) {
+    return 'Work values themes were not scored separately in this assessment; overall values and judgment scores reflect the values-related items in your test.';
+  }
+  const topValue = entries.sort((a, b) => num(b[1], 0) - num(a[1], 0))[0];
   const descriptions = {
-    achievement: 'achievement and mastery',
-    stability: 'stability and structure',
-    creativity: 'creativity and autonomy',
-    helping: 'service and collaboration',
-    leadership: 'influence and responsibility'
+    achievement: 'accomplishment and recognition',
+    stability: 'security and structured environments',
+    creativity: 'innovation and self-expression',
+    helping: 'service and supporting others',
+    leadership: 'influence and decision-making'
   };
-
-  return `Leading theme: ${descriptions[topValue[0]] || topValue[0].replace(/_/g, ' ')}.`;
+  return `Among measured work themes, the strongest signal is ${descriptions[topValue[0]] || 'balanced preferences'}.`;
 }
 
-/**
- * Career Compass PDF — minimal layout, wrapped text, pagination, data aligned to test.results.
- */
+function aptitudeNarrative(aptitudePct, results) {
+  const pct = clampPct(aptitudePct);
+  const breakdown = results?.scores?.aptitudeBreakdown;
+  if (breakdown && typeof breakdown === 'object') {
+    const top = Object.entries(breakdown)
+      .sort((a, b) => num(b[1], 0) - num(a[1], 0))
+      .slice(0, 2)
+      .map(([k]) => k);
+    if (top.length) {
+      return `Aptitude performance is estimated at ${pct}% overall, with relatively stronger areas in ${top.join(' and ')}.`;
+    }
+  }
+  return `Aptitude-related items in this assessment are summarized at ${pct}% (normalized against your answered aptitude questions).`;
+}
+
 export async function generateCareerReport(testData, userData) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
         size: 'A4',
-        margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-        bufferPages: true
+        margins: { top: M.top, bottom: M.bottom, left: M.left, right: M.right },
+        autoFirstPage: true
       });
 
       const chunks = [];
-      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('data', chunk => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
       const results = testData?.results || {};
-      const scores = results.scores || {};
-      const streamScores = getStreamScores(results);
+      const scores = {
+        aptitude: clampPct(results.scores?.aptitude),
+        values: clampPct(results.scores?.values),
+        personality: clampPct(results.scores?.personality),
+        skills: clampPct(results.scores?.skills),
+        interest: clampPct(results.scores?.interest)
+      };
+
+      const streamScores = resolveStreamScores(testData);
       const ranked = sortedStreams(streamScores);
-      const primary = ranked[0] || ['Primary stream', 0];
-      const secondary = ranked[1] || ['Secondary stream', 0];
+      const primary = ranked[0] || ['PCM (Science with Maths)', 0];
+      const secondary = ranked[1] || ranked[0] || ['PCB (Science with Biology)', 0];
 
-      const name = (userData && (userData.name || userData?.profile?.name)) || 'Student';
-      const grade = userData?.profile?.grade;
-      const school = userData?.profile?.school;
+      const bottomLimit = () => PAGE.h - M.bottom - FOOTER_RESERVE;
 
-      const aptitudePct = clampPct(scores.aptitude);
-      const valuesPct = clampPct(scores.values);
-      const personalityPct = clampPct(scores.personality);
-      const skillsPct = clampPct(scores.skills);
-      const esiPct = clampPct(results.esiScore != null ? results.esiScore : scores.values);
+      const drawFooter = () => {
+        const y = PAGE.h - M.bottom - 6;
+        doc.fontSize(8)
+          .font('Helvetica')
+          .fillColor(COLORS.muted)
+          .text(
+            'Career Compass · Powered by Vijnax · Confidential',
+            M.left,
+            y,
+            { width: CONTENT_W, align: 'center' }
+          );
+      };
 
-      let y = MARGIN;
-
-      const ensureSpace = (needed) => {
-        if (y + needed > BOTTOM_SAFE) {
+      const ensureSpace = minHeight => {
+        if (doc.y + minHeight > bottomLimit()) {
+          drawFooter();
           doc.addPage();
-          y = MARGIN;
+          doc.x = M.left;
+          doc.y = M.top;
         }
       };
 
-      const line = (text, opts = {}) => {
-        const fs = opts.size || 10;
-        const font = opts.bold ? 'Helvetica-Bold' : 'Helvetica';
-        const color = opts.color || colors.ink;
-        const leading = opts.leading || fs * 1.35;
-        doc.font(font).fontSize(fs).fillColor(color);
-        const h = doc.heightOfString(String(text), {
-          width: CONTENT_W,
-          align: opts.align || 'left',
-          lineGap: opts.lineGap ?? 2
-        });
-        ensureSpace(h + 6);
-        doc.text(String(text), MARGIN, y, {
-          width: CONTENT_W,
-          align: opts.align || 'left',
-          lineGap: opts.lineGap ?? 2
-        });
-        y = doc.y + (opts.after || 10);
+      const heading = (text, size = 14) => {
+        ensureSpace(size + 28);
+        doc.fontSize(size)
+          .font('Helvetica-Bold')
+          .fillColor(COLORS.primary)
+          .text(text, M.left, doc.y, { width: CONTENT_W });
+        doc.moveDown(0.35);
       };
 
-      const rule = () => {
+      const subheading = (text, size = 11) => {
+        ensureSpace(size + 20);
+        doc.fontSize(size)
+          .font('Helvetica-Bold')
+          .fillColor(COLORS.text)
+          .text(text, M.left, doc.y, { width: CONTENT_W });
+        doc.moveDown(0.25);
+      };
+
+      const paragraph = (text, opts = {}) => {
+        const size = opts.size || 10;
+        const lineGap = opts.lineGap ?? 2;
+        ensureSpace(36);
+        doc.fontSize(size)
+          .font(opts.bold ? 'Helvetica-Bold' : 'Helvetica')
+          .fillColor(opts.color || COLORS.text)
+          .text(text, M.left, doc.y, {
+            width: CONTENT_W,
+            align: opts.align || 'left',
+            lineGap
+          });
+        doc.moveDown(0.5);
+      };
+
+      const divider = () => {
         ensureSpace(16);
-        doc.moveTo(MARGIN, y).lineTo(PAGE.w - MARGIN, y).strokeColor(colors.line).lineWidth(0.5).stroke();
-        y += 14;
+        const y = doc.y;
+        doc.moveTo(M.left, y)
+          .lineTo(PAGE.w - M.right, y)
+          .strokeColor(COLORS.border)
+          .lineWidth(0.5)
+          .stroke();
+        doc.moveDown(0.6);
       };
 
-      const barRow = (label, pct) => {
+      const progressRow = (label, pct) => {
+        const rowH = 22;
+        ensureSpace(rowH + 8);
+        const y = doc.y;
+        const barW = Math.min(240, CONTENT_W - 130);
+        const barX = M.left + 115;
         const p = clampPct(pct);
-        const barH = 6;
-        const barW = CONTENT_W - 120;
-        const labelH = 14;
-        ensureSpace(28);
-        doc.font('Helvetica').fontSize(9).fillColor(colors.muted).text(label, MARGIN, y, { width: 110 });
-        doc.rect(MARGIN + 115, y + 3, barW, barH).fillColor(colors.line).fill();
-        doc.rect(MARGIN + 115, y + 3, (barW * p) / 100, barH).fillColor(colors.accent).fill();
-        doc.font('Helvetica-Bold').fontSize(9).fillColor(colors.ink).text(`${p}%`, MARGIN + 115 + barW + 8, y + 1, {
-          width: 40,
-          align: 'right'
-        });
-        y += 22;
+        const fillColor = p >= 70 ? '#15803d' : p >= 50 ? '#ca8a04' : COLORS.muted;
+
+        doc.fontSize(9)
+          .font('Helvetica')
+          .fillColor(COLORS.text)
+          .text(label, M.left, y + 4, { width: 108 });
+
+        doc.roundedRect(barX, y + 2, barW, 12, 2).fill('#e2e8f0');
+        doc.roundedRect(barX, y + 2, (p / 100) * barW, 12, 2).fill(fillColor);
+
+        doc.fontSize(9)
+          .font('Helvetica-Bold')
+          .fillColor(COLORS.primary)
+          .text(`${p}%`, barX + barW + 8, y + 4, { width: 40, align: 'right' });
+
+        doc.y = y + rowH;
       };
 
-      // --- Page header block ---
-      doc.font('Helvetica-Bold').fontSize(20).fillColor(colors.ink).text('Career Compass', MARGIN, y, {
-        width: CONTENT_W,
-        align: 'left'
-      });
-      y = doc.y + 4;
-      line('Stream selection report', { size: 11, color: colors.muted, after: 6 });
-      rule();
+      // ---- Cover band ----
+      doc.rect(0, 0, PAGE.w, 72).fill(COLORS.primary);
+      doc.fontSize(22)
+        .font('Helvetica-Bold')
+        .fillColor('#ffffff')
+        .text('Career Compass', M.left, 26, { width: CONTENT_W, align: 'center' });
+      doc.fontSize(11)
+        .font('Helvetica')
+        .fillColor('#cbd5e1')
+        .text('Stream selection & career guidance report', M.left, 50, { width: CONTENT_W, align: 'center' });
 
-      line(`Student: ${name}`, { size: 11, bold: true });
-      if (grade) line(`Class / grade: ${grade}`, { size: 10 });
-      if (school) line(`School: ${school}`, { size: 10 });
-      line(
-        `Report date: ${new Date().toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric'
-        })}`,
-        { size: 10, color: colors.muted }
+      doc.y = 88;
+      doc.x = M.left;
+
+      // Student block
+      heading('Student details', 12);
+      const profile = userData?.profile || {};
+      paragraph(
+        [
+          `Name: ${userData?.name || 'N/A'}`,
+          `Class: ${profile.grade || 'N/A'}`,
+          `School: ${profile.school || 'N/A'}`,
+          `Report date: ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+          `Assessment ID: ${testIdShort(testData)}`
+        ].join('\n'),
+        { size: 10, lineGap: 3 }
       );
-      line(`Assessment ID: ${assessmentId(testData)}`, { size: 10, color: colors.muted });
-      if (testData.completedAt) {
-        line(`Completed: ${new Date(testData.completedAt).toLocaleDateString('en-IN')}`, {
-          size: 10,
-          color: colors.muted
-        });
-      }
 
-      rule();
-      line('Summary', { size: 12, bold: true, after: 6 });
+      divider();
 
+      // Executive summary
+      heading('Executive summary', 13);
       const conf =
-        primary[1] > 75 ? 'High' : primary[1] > 60 ? 'Medium' : primary[1] > 0 ? 'Moderate' : '—';
-      line(
-        `Primary recommendation: ${primary[0]} (${clampPct(primary[1])}%). ` +
-          `Secondary: ${secondary[0]} (${clampPct(secondary[1])}%). ` +
-          `Confidence band: ${conf} (based on stream fit scores in this report).`,
-        { size: 10, leading: 14 }
+        primary[1] >= 75 ? 'High' : primary[1] >= 60 ? 'Medium' : 'Moderate';
+      paragraph(
+        `Primary stream: ${primary[0]} (${primary[1]}%). ` +
+          `Secondary option: ${secondary[0]} (${secondary[1]}%). ` +
+          `Confidence band: ${conf}, based on your assessment scores and stream fit model used in this product.`,
+        { size: 10, lineGap: 3 }
       );
 
-      rule();
-      line('Stream fit', { size: 12, bold: true, after: 8 });
+      divider();
 
-      const streamLabels = [
-        ['PCM (Science with Maths)', 'PCM'],
-        ['PCB (Science with Biology)', 'PCB'],
-        ['Commerce', 'Commerce'],
-        ['Humanities', 'Humanities']
+      // Stream fit
+      heading('Stream fit scores', 13);
+      paragraph(
+        'Percentages reflect either direct stream mapping from your answers (when available) or the weighted score model used by the Career Compass report API.',
+        { size: 9, color: COLORS.muted }
+      );
+
+      const streamOrder = [
+        'PCM (Science with Maths)',
+        'PCB (Science with Biology)',
+        'Commerce',
+        'Humanities'
       ];
-      for (const [longKey, shortKey] of streamLabels) {
-        const v = streamScores[longKey] ?? streamScores[shortKey];
-        barRow(longKey, v ?? 0);
+      streamOrder.forEach(name => {
+        const v = streamScores[name];
+        progressRow(name, v != null ? v : 0);
+      });
+
+      doc.moveDown(0.3);
+      divider();
+
+      // Domain scores (correct fields — no duplicate “ESI” = values twice mislabeled)
+      heading('Score overview', 13);
+      progressRow('Aptitude', scores.aptitude);
+      progressRow('Personality', scores.personality);
+      progressRow('Values & judgment', scores.values);
+      progressRow('Learning / skills', scores.skills);
+      if (scores.interest > 0) {
+        progressRow('Interest (aggregate)', scores.interest);
       }
 
-      ensureSpace(40);
-      rule();
-      line('Domain scores', { size: 12, bold: true, after: 8 });
-      line(
-        'Percentages reflect your responses within each scored domain. Skills includes learning-orientation items.',
-        { size: 9, color: colors.muted, leading: 12 }
-      );
-      barRow('Aptitude', aptitudePct);
-      barRow('Values', valuesPct);
-      barRow('Personality (Big Five)', personalityPct);
-      barRow('Skills & learning', skillsPct);
-      if (results.esiScore != null && results.esiScore !== scores.values) {
-        barRow('Emotional & social index (stored)', esiPct);
-      } else {
-        line('Note: ESI-style items are scored within the Values domain for this test version.', {
-          size: 9,
-          color: colors.muted,
-          leading: 12
-        });
-      }
+      doc.moveDown(0.2);
+      divider();
 
-      ensureSpace(36);
-      rule();
-      line('Profile detail', { size: 12, bold: true, after: 6 });
-      line(`Aptitude index: ${aptitudePct}% overall.`, { size: 10 });
-      line(riasecNarrative(results.riasecProfile), { size: 10, leading: 14 });
-      line(personalityNarrative(results.personalityProfile), { size: 10, leading: 14 });
-      line(workValuesLine(results.workValues), { size: 10, leading: 14 });
+      // Narrative sections — dynamic height, paginate
+      heading('Interpretation', 13);
 
-      if (results.overallScore != null) {
-        line(`Overall composite: ${clampPct(results.overallScore)}%.`, { size: 10, color: colors.muted });
-      }
+      subheading('Aptitude');
+      paragraph(aptitudeNarrative(scores.aptitude, results), { size: 10 });
 
-      ensureSpace(60);
-      rule();
-      line('Disclaimer', { size: 12, bold: true, after: 6 });
-      line(
-        'This report summarises automated scores from your assessment. It is guidance only—not a prediction of exam results, admissions, or career outcomes. Discuss results with parents, teachers, or a qualified counsellor.',
-        { size: 9, color: colors.muted, leading: 13 }
+      subheading('Career interests (RIASEC)');
+      const riasecScores = results.riasecProfile || {};
+      const topRI = getTopRIASECTypes(riasecScores);
+      paragraph(
+        `${topRI.join(' and ')} themes rank highest among your RIASEC responses: ${getRIASECDescription(topRI)}.`,
+        { size: 10 }
       );
 
-      const range = doc.bufferedPageRange();
-      for (let i = range.start; i < range.start + range.count; i++) {
-        doc.switchToPage(i);
-        doc.font('Helvetica').fontSize(8).fillColor(colors.muted).text('Career Compass · Vijnax', MARGIN, PAGE.h - 32, {
-          width: CONTENT_W,
-          align: 'center'
-        });
-      }
+      subheading('Personality (Big Five)');
+      paragraph(getPersonalityDescription(results.personalityProfile || {}), { size: 10 });
 
+      subheading('Values, learning, and work preferences');
+      paragraph(
+        `Values-related and judgment items contribute to the values score (${scores.values}%). ` +
+          `Learning orientation and related habits are reflected in the learning/skills score (${scores.skills}%).`,
+        { size: 10 }
+      );
+      paragraph(getWorkValuesDescription(results.workValues), { size: 10 });
+
+      ensureSpace(80);
+      divider();
+
+      heading('Guidance for parents', 12);
+      paragraph(
+        `Support ${userData?.name || 'the student'} in exploring ${primary[0]} without pressure. ` +
+          `Interests can evolve; ${secondary[0]} remains a reasonable secondary path at ${secondary[1]}% in this model. ` +
+          `Balance academics with wellbeing, routines, and activities the student enjoys.`,
+        { size: 10, lineGap: 3 }
+      );
+
+      ensureSpace(100);
+      divider();
+
+      heading('Disclaimer', 11);
+      paragraph(
+        'This report summarizes psychometric-style questionnaire results. It is guidance only, not a medical or psychological diagnosis, ' +
+          'not a prediction of exam results, and not a guarantee of admission or outcomes. Use it together with school records, conversations, and professional advice where appropriate.',
+        { size: 9, color: COLORS.muted, lineGap: 2 }
+      );
+
+      const bullets = [
+        'Results depend on honest responses and question coverage in this test version.',
+        'Recommended streams may change as skills and interests develop.',
+        'Does not replace informed student and family choice.'
+      ];
+      bullets.forEach(b => paragraph(`• ${b}`, { size: 9, color: COLORS.muted }));
+
+      drawFooter();
       doc.end();
     } catch (error) {
       reject(error);
