@@ -178,7 +178,8 @@ export async function generateCareerReport(testData, userData) {
       const doc = new PDFDocument({
         size: 'A4',
         margins: { top: M.top, bottom: M.bottom, left: M.left, right: M.right },
-        autoFirstPage: true
+        autoFirstPage: true,
+        bufferPages: true
       });
 
       const chunks = [];
@@ -202,22 +203,11 @@ export async function generateCareerReport(testData, userData) {
 
       const bottomLimit = () => PAGE.h - M.bottom - FOOTER_RESERVE;
 
-      const drawFooter = () => {
-        const y = PAGE.h - M.bottom - 6;
-        doc.fontSize(8)
-          .font('Helvetica')
-          .fillColor(COLORS.muted)
-          .text(
-            'Career Compass · Powered by Vijnax · Confidential',
-            M.left,
-            y,
-            { width: CONTENT_W, align: 'center' }
-          );
-      };
+      /** Single-line footer; drawn once per page after all content (see flushFooters). */
+      const FOOTER_TEXT = 'Career Compass · Powered by Vijnax · Confidential';
 
       const ensureSpace = minHeight => {
         if (doc.y + minHeight > bottomLimit()) {
-          drawFooter();
           doc.addPage();
           doc.x = M.left;
           doc.y = M.top;
@@ -423,7 +413,21 @@ export async function generateCareerReport(testData, userData) {
       ];
       bullets.forEach(b => paragraph(`• ${b}`, { size: 9, color: COLORS.muted }));
 
-      drawFooter();
+      // One footer per page only (avoids stacking from ensureSpace + end)
+      const footerY = PAGE.h - M.bottom - 10;
+      const range = doc.bufferedPageRange();
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        doc.fontSize(8)
+          .font('Helvetica')
+          .fillColor(COLORS.muted)
+          .text(FOOTER_TEXT, M.left, footerY, {
+            width: CONTENT_W,
+            align: 'center',
+            lineBreak: false
+          });
+      }
+      doc.flushPages();
       doc.end();
     } catch (error) {
       reject(error);
