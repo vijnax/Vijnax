@@ -57,10 +57,12 @@ const getCorsOrigins = () => {
   return ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173'];
 };
 
-app.use(cors({
-  origin: getCorsOrigins(),
-  credentials: true
-}));
+app.use(cors(""
+//   {
+//   origin: getCorsOrigins(),
+//   credentials: true
+// }
+));
 
 // Rate limiting
 // Using trust proxy: 1 means we only trust the first proxy (Render's load balancer)
