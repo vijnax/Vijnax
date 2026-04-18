@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { resolveStreamAnalysisFromResults } from './streamCompositeScorer.js';
 
 /**
  * Career Compass PDF — clean layout, safe pagination, data aligned with test results
@@ -36,32 +37,9 @@ function testIdShort(testData) {
   }
 }
 
-/** Same weighting as routes/reports.js calculateStreamAnalysis */
+/** 7-factor composite when sectionStreamScores present; else legacy domain blend. */
 function computeStreamAnalysisFromScores(results) {
-  const s = results?.scores || {};
-  const aptitude = num(s.aptitude, 0);
-  const values = num(s.values, 0);
-  const personality = num(s.personality, 0);
-  const skills = num(s.skills, 0);
-
-  return {
-    'PCM (Science with Maths)': Math.min(
-      100,
-      Math.round(aptitude * 0.4 + values * 0.2 + personality * 0.2 + skills * 0.2)
-    ),
-    'PCB (Science with Biology)': Math.min(
-      100,
-      Math.round(aptitude * 0.3 + values * 0.3 + personality * 0.2 + skills * 0.2)
-    ),
-    Commerce: Math.min(
-      100,
-      Math.round(values * 0.4 + personality * 0.3 + aptitude * 0.2 + skills * 0.1)
-    ),
-    Humanities: Math.min(
-      100,
-      Math.round(personality * 0.4 + values * 0.3 + skills * 0.2 + aptitude * 0.1)
-    )
-  };
+  return resolveStreamAnalysisFromResults(results || {});
 }
 
 function resolveStreamScores(testData) {

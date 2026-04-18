@@ -14,8 +14,20 @@ import learningSelector from '../services/learningSelector.js';
 import esiSelector from '../services/esiSelector.js';
 import workValuesSelector, { WORK_SUBTHEMES } from '../services/workValuesSelector.js';
 import enhancedSelector from '../services/enhancedQuestionSelector.js';
+import bigFiveScorer from '../services/bigFiveScorer.js';
+import {
+  getQuestionSection,
+  emptyStreamCounts,
+  interestStreamPercentagesFromRiasec,
+  streamPercentagesFromCounts,
+  computeCompositeStreamAnalysis,
+  legacyStreamAnalysisFromDomainScores,
+  STREAM_KEYS
+} from '../services/streamCompositeScorer.js';
 
 const router = express.Router();
+const STREAM_SET = new Set(STREAM_KEYS);
+const SECTIONS_FOR_COMPOSITE = ['aptitude', 'personality', 'decision', 'learning', 'esi', 'workValues'];
 
 // Helper to add section key and maintain numbering offset
 function normalize(questions, sectionKey, startIndex = 1) {
@@ -1108,7 +1120,7 @@ router.post('/submit', verifyToken, async (req, res) => {
 
 // Helper function to calculate test results based on ACTUAL answers
 async function calculateTestResults(testQuestions) {
-  // Stream counters (based on mappedStream in options)
+  // Stream counters (based on mappedStream in options — all sections)
   const streamScores = {
     PCM: 0,
     PCB: 0,
@@ -1121,6 +1133,13 @@ async function calculateTestResults(testQuestions) {
   
   let aptitudeCount = 0, valuesCount = 0, personalityCount = 0, skillsCount = 0;
   let aptitudeTotal = 0, valuesTotal = 0, personalityTotal = 0, skillsTotal = 0;
+
+  const sectionStreamRaw = {};
+  const sectionTotals = {};
+  for (const s of SECTIONS_FOR_COMPOSITE) {
+    sectionStreamRaw[s] = emptyStreamCounts();
+    sectionTotals[s] = 0;
+  }
   
   // Fetch all questions with their scoring data
   const questionIds = testQuestions.map(tq => tq.questionId);
@@ -1148,6 +1167,16 @@ async function calculateTestResults(testQuestions) {
     // STREAM SCORING (most important for career guidance)
     if (selectedOption.mappedStream) {
       streamScores[selectedOption.mappedStream] = (streamScores[selectedOption.mappedStream] || 0) + 1;
+    }
+
+    // Per-section stream counts (7-factor composite spec)
+    const secKey = getQuestionSection(question);
+    if (secKey && secKey !== 'interest') {
+      sectionTotals[secKey] += 1;
+      const ms = selectedOption.mappedStream;
+      if (ms && STREAM_SET.has(ms)) {
+        sectionStreamRaw[secKey][ms] += 1;
+      }
     }
     
     // DOMAIN SCORING (for section-wise scores)
@@ -1185,30 +1214,50 @@ async function calculateTestResults(testQuestions) {
     skills: skillsCount > 0 ? Math.round((skillsTotal / (skillsCount * 10)) * 100) : 0
   };
 
-  // Calculate stream percentages (normalized to 100)
   const totalStreamAnswers = Object.values(streamScores).reduce((a, b) => a + b, 0);
-  const streamAnalysis = {};
-  
-  if (totalStreamAnswers > 0) {
-    streamAnalysis['PCM (Science with Maths)'] = Math.round((streamScores.PCM / totalStreamAnswers) * 100);
-    streamAnalysis['PCB (Science with Biology)'] = Math.round((streamScores.PCB / totalStreamAnswers) * 100);
-    streamAnalysis['Commerce'] = Math.round((streamScores.Commerce / totalStreamAnswers) * 100);
-    streamAnalysis['Humanities'] = Math.round((streamScores.Humanities / totalStreamAnswers) * 100);
-  } else {
-    // Fallback if no mappedStream data
-    streamAnalysis['PCM (Science with Maths)'] = Math.round((scores.aptitude * 0.4) + (scores.values * 0.2) + (scores.personality * 0.2) + (scores.skills * 0.2));
-    streamAnalysis['PCB (Science with Biology)'] = Math.round((scores.aptitude * 0.3) + (scores.values * 0.3) + (scores.personality * 0.2) + (scores.skills * 0.2));
-    streamAnalysis['Commerce'] = Math.round((scores.values * 0.4) + (scores.personality * 0.3) + (scores.aptitude * 0.2) + (scores.skills * 0.1));
-    streamAnalysis['Humanities'] = Math.round((scores.personality * 0.4) + (scores.values * 0.3) + (scores.skills * 0.2) + (scores.aptitude * 0.1));
+
+  const sectionStreamScores = {
+    interest: interestStreamPercentagesFromRiasec(riasecProfile)
+  };
+  for (const s of SECTIONS_FOR_COMPOSITE) {
+    sectionStreamScores[s] = streamPercentagesFromCounts(sectionStreamRaw[s], sectionTotals[s]);
+  }
+
+  const personalityMapped = STREAM_KEYS.reduce((a, k) => a + (sectionStreamRaw.personality[k] || 0), 0);
+  if ((sectionTotals.personality || 0) > 0 && personalityMapped === 0) {
+    const traitAnswers = await bigFiveScorer.resolveTraitsFromAnswers(
+      testQuestions.filter(tq => tq.answer).map(tq => ({
+        questionId: tq.questionId,
+        selectedOption: tq.answer,
+        selectedOptionText: tq.answer
+      }))
+    );
+    const { normalized } = bigFiveScorer.scoreResponses(traitAnswers);
+    sectionStreamScores.personality = bigFiveScorer.streamFitPercentagesFromNormalized(normalized);
+  }
+
+  let streamAnalysis = computeCompositeStreamAnalysis(sectionStreamScores);
+  const compositeMax = Math.max(...Object.values(streamAnalysis), 0);
+  if (compositeMax === 0 && totalStreamAnswers > 0) {
+    streamAnalysis = {
+      'PCM (Science with Maths)': Math.round((streamScores.PCM / totalStreamAnswers) * 100),
+      'PCB (Science with Biology)': Math.round((streamScores.PCB / totalStreamAnswers) * 100),
+      Commerce: Math.round((streamScores.Commerce / totalStreamAnswers) * 100),
+      Humanities: Math.round((streamScores.Humanities / totalStreamAnswers) * 100)
+    };
+  } else if (compositeMax === 0) {
+    streamAnalysis = legacyStreamAnalysisFromDomainScores(scores);
   }
 
   console.log('✅ Results calculated:');
   console.log('   Stream Scores:', streamScores);
+  console.log('   Section stream %:', sectionStreamScores);
   console.log('   Stream Analysis:', streamAnalysis);
   console.log('   Domain Scores:', scores);
 
   return {
     scores,
+    sectionStreamScores,
     streamAnalysis,
     riasecProfile,
     personalityProfile,

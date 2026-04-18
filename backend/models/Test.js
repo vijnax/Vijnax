@@ -141,7 +141,17 @@ const testSchema = new mongoose.Schema({
     generatedAt: {
       type: Date,
       default: null
-    }
+    },
+    streamAnalysis: mongoose.Schema.Types.Mixed,
+    sectionStreamScores: mongoose.Schema.Types.Mixed,
+    riasecProfile: mongoose.Schema.Types.Mixed,
+    personalityProfile: mongoose.Schema.Types.Mixed,
+    workValues: mongoose.Schema.Types.Mixed,
+    esiScore: Number,
+    totalQuestions: Number,
+    answeredQuestions: Number,
+    completionPercentage: Number,
+    overallScore: Number
   },
   metadata: {
     deviceInfo: {

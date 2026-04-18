@@ -3,6 +3,7 @@ import { verifyToken } from '../middleware/auth.js';
 import Test from '../models/Test.js';
 import User from '../models/User.js';
 import { generateCareerReport } from '../services/reportGenerator.js';
+import { resolveStreamAnalysisFromResults } from '../services/streamCompositeScorer.js';
 
 const router = express.Router();
 
@@ -56,7 +57,7 @@ router.get('/:testId', verifyToken, async (req, res) => {
         },
         user: test.userId,
         results: test.results,
-        streamAnalysis: calculateStreamAnalysis(test.results),
+        streamAnalysis: resolveStreamAnalysisFromResults(test.results),
         recommendations: generateRecommendations(test.results)
       }
     });
@@ -111,7 +112,7 @@ router.get('/:testId/pdf', verifyToken, async (req, res) => {
     console.log(`📄 Generating PDF report for test ${testId}...`);
 
     // Add stream analysis to results
-    test.results.streamAnalysis = calculateStreamAnalysis(test.results);
+    test.results.streamAnalysis = resolveStreamAnalysisFromResults(test.results);
 
     // Generate PDF
     const pdfBuffer = await generateCareerReport(test, test.userId);
@@ -194,43 +195,7 @@ router.post('/:testId/email', verifyToken, async (req, res) => {
 // ============= HELPER FUNCTIONS =============
 
 function calculateStreamAnalysis(results) {
-  const { scores } = results;
-  
-  // Calculate weighted stream scores
-  const pcmScore = Math.round(
-    (scores.aptitude || 0) * 0.4 +
-    (scores.values || 0) * 0.2 +
-    (scores.personality || 0) * 0.2 +
-    (scores.skills || 0) * 0.2
-  );
-  
-  const pcbScore = Math.round(
-    (scores.aptitude || 0) * 0.3 +
-    (scores.values || 0) * 0.3 +
-    (scores.personality || 0) * 0.2 +
-    (scores.skills || 0) * 0.2
-  );
-  
-  const commerceScore = Math.round(
-    (scores.values || 0) * 0.4 +
-    (scores.personality || 0) * 0.3 +
-    (scores.aptitude || 0) * 0.2 +
-    (scores.skills || 0) * 0.1
-  );
-  
-  const humanitiesScore = Math.round(
-    (scores.personality || 0) * 0.4 +
-    (scores.values || 0) * 0.3 +
-    (scores.skills || 0) * 0.2 +
-    (scores.aptitude || 0) * 0.1
-  );
-  
-  return {
-    'PCM (Science with Maths)': Math.min(pcmScore, 100),
-    'PCB (Science with Biology)': Math.min(pcbScore, 100),
-    'Commerce': Math.min(commerceScore, 100),
-    'Humanities': Math.min(humanitiesScore, 100)
-  };
+  return resolveStreamAnalysisFromResults(results);
 }
 
 function generateRecommendations(results) {

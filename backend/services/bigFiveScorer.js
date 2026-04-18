@@ -61,9 +61,9 @@ class BigFiveScorer {
 
     const candidates = [];
     if (c > 7 && o > 7) candidates.push('PCM');
-    if (a > 7 && c > 6 && s > 6) candidates.push('PCB');
+    if (a > 7 && c > 6) candidates.push('PCB');
     if (o > 7 && a > 6) candidates.push('Humanities');
-    if ((e > 7 && c > 6) || (e > 7 && o > 6)) candidates.push('Commerce');
+    if (e > 7 && c > 6) candidates.push('Commerce');
 
     // Ranking by composite fit
     const fit = {
@@ -91,6 +91,24 @@ class BigFiveScorer {
       suggestions: suggestion,
       ranking: sorted,
       counselingFlag: totalLow
+    };
+  }
+
+  /** Map normalized Big Five scores to stream alignment % (when options lack mappedStream). */
+  streamFitPercentagesFromNormalized(norm) {
+    const c = norm.C, o = norm.O, a = norm.A, e = norm.E, s = norm.S;
+    const fit = {
+      PCM: c * 0.6 + o * 0.4 + s * 0.2,
+      PCB: a * 0.5 + c * 0.3 + s * 0.4,
+      Humanities: o * 0.6 + a * 0.4 + s * 0.2,
+      Commerce: e * 0.6 + c * 0.3 + o * 0.2
+    };
+    const maxF = Math.max(...Object.values(fit), 1e-6);
+    return {
+      PCM: Math.min(100, Math.round((fit.PCM / maxF) * 100)),
+      PCB: Math.min(100, Math.round((fit.PCB / maxF) * 100)),
+      Commerce: Math.min(100, Math.round((fit.Commerce / maxF) * 100)),
+      Humanities: Math.min(100, Math.round((fit.Humanities / maxF) * 100))
     };
   }
 }

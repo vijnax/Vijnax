@@ -7,11 +7,31 @@ import Test from '../models/Test.js';
 
 const router = express.Router();
 
-// Initialize Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+/** Lazily create Razorpay so the server can boot without payment keys (local dev). */
+let razorpaySingleton = null;
+let razorpayUnavailableLogged = false;
+function getRazorpay() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    if (!razorpayUnavailableLogged) {
+      razorpayUnavailableLogged = true;
+      console.warn('⚠️  Razorpay disabled: set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to enable payments.');
+    }
+    return null;
+  }
+  if (!razorpaySingleton) {
+    razorpaySingleton = new Razorpay({ key_id: keyId, key_secret: keySecret });
+  }
+  return razorpaySingleton;
+}
+
+function paymentsNotConfigured(res) {
+  return res.status(503).json({
+    success: false,
+    message: 'Payment service is not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in the server environment.'
+  });
+}
 
 // Test amount (in paise - 1 INR = 100 paise)
 const TEST_AMOUNT = 9900; // ₹99
@@ -21,6 +41,9 @@ const TEST_AMOUNT = 9900; // ₹99
 // @access  Private
 router.post('/create-order', verifyToken, async (req, res) => {
   try {
+    const razorpay = getRazorpay();
+    if (!razorpay) return paymentsNotConfigured(res);
+
     const { amount = TEST_AMOUNT, currency = 'INR', testId } = req.body;
 
     // Create order options
@@ -68,6 +91,9 @@ router.post('/create-order', verifyToken, async (req, res) => {
 // @access  Private
 router.post('/verify', verifyToken, async (req, res) => {
   try {
+    const razorpay = getRazorpay();
+    if (!razorpay) return paymentsNotConfigured(res);
+
     const { 
       razorpay_order_id, 
       razorpay_payment_id, 
@@ -162,6 +188,9 @@ router.post('/verify', verifyToken, async (req, res) => {
 // @access  Private
 router.get('/status/:paymentId', verifyToken, async (req, res) => {
   try {
+    const razorpay = getRazorpay();
+    if (!razorpay) return paymentsNotConfigured(res);
+
     const { paymentId } = req.params;
 
     // Fetch payment details from Razorpay
