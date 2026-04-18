@@ -1153,16 +1153,16 @@ async function calculateTestResults(testQuestions) {
     // DOMAIN SCORING (for section-wise scores)
     const domain = question.domain;
     if (domain === 'aptitude') {
-      aptitudeTotal += selectedOption.score || 5;
+      aptitudeTotal += selectedOption.score ?? 0;
       aptitudeCount++;
     } else if (domain === 'values') {
-      valuesTotal += selectedOption.score || 5;
+      valuesTotal += selectedOption.score ?? 0;
       valuesCount++;
     } else if (domain === 'personality') {
-      personalityTotal += selectedOption.score || 5;
+      personalityTotal += selectedOption.score ?? 0;
       personalityCount++;
     } else if (domain === 'skills') {
-      skillsTotal += selectedOption.score || 5;
+      skillsTotal += selectedOption.score ?? 0;
       skillsCount++;
     }
     
@@ -1173,16 +1173,16 @@ async function calculateTestResults(testQuestions) {
     
     // Personality trait scoring
     if (selectedOption.mappedTrait) {
-      personalityProfile[selectedOption.mappedTrait] = (personalityProfile[selectedOption.mappedTrait] || 0) + (selectedOption.score || 5);
+      personalityProfile[selectedOption.mappedTrait] = (personalityProfile[selectedOption.mappedTrait] || 0) + (selectedOption.score ?? 0);
     }
   });
 
   // Calculate percentage scores
   const scores = {
-    aptitude: aptitudeCount > 0 ? Math.round((aptitudeTotal / (aptitudeCount * 10)) * 100) : 65,
-    values: valuesCount > 0 ? Math.round((valuesTotal / (valuesCount * 10)) * 100) : 65,
-    personality: personalityCount > 0 ? Math.round((personalityTotal / (personalityCount * 10)) * 100) : 65,
-    skills: skillsCount > 0 ? Math.round((skillsTotal / (skillsCount * 10)) * 100) : 65
+    aptitude: aptitudeCount > 0 ? Math.round((aptitudeTotal / (aptitudeCount * 10)) * 100) : 0,
+    values: valuesCount > 0 ? Math.round((valuesTotal / (valuesCount * 10)) * 100) : 0,
+    personality: personalityCount > 0 ? Math.round((personalityTotal / (personalityCount * 10)) * 100) : 0,
+    skills: skillsCount > 0 ? Math.round((skillsTotal / (skillsCount * 10)) * 100) : 0
   };
 
   // Calculate stream percentages (normalized to 100)
